@@ -1,0 +1,178 @@
+"""Citta Companion — Flask server rendering the reference chat UI.
+
+Serves the pixel-perfect frontend in ``templates/index.html`` (a faithful port
+of the approved "Citta Companion Chat" design) and exposes a small JSON API
+that reuses the existing service modules:
+
+    python server.py            # then open http://localhost:8000
+    http://localhost:8000/?id=CITTA-EMP001&sector=IT&lang=en
+
+The Streamlit entry point (``app.py``) is unchanged and still works, but this
+server is the primary UI because Streamlit cannot reproduce the design 1:1.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+
+from flask import Flask, jsonify, render_template, request
+
+import config
+from email_service import send_admin_alert, send_support_request_alert
+from gemini_service import (
+    GeminiUnavailableError,
+    generate_response,
+    initialize_model,
+)
+from google_sheets import save_chat_summary, save_risk_flag, save_support_lead
+from prompts import CRISIS_MESSAGE, FALLBACK_ERROR_MESSAGE, get_system_prompt
+from risk_detection import RISK_CRISIS, detect_risk, matched_keywords
+from summary_generator import generate_summary
+from utils import language_label
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
+
+# Quick-reply chips (verbatim from the reference design).
+SUGGESTIONS = ["Workload", "Sleep", "Team pressure", "Something personal"]
+
+# The welcome copy shown by the frontend, kept in the model's history so the
+# conversation context matches what the employee actually saw.
+# Official opening message from the project scope document.
+WELCOME_TEXT = (
+    "Hello, I'm Citta Companion. I'm here to support your wellbeing and help "
+    "understand what kind of support may be useful. This is not a diagnosis, "
+    "therapy, or emergency service. Your employer will not receive your "
+    "individual responses. They may only receive de-identified wellbeing "
+    "themes. How are you feeling today?"
+)
+
+# In-memory session store: {session_id: {...}}. Suitable for the local,
+# single-process deployment this app targets.
+SESSIONS: dict[str, dict] = {}
+
+
+def _first_param(key: str, default: str) -> str:
+    value = request.args.get(key, default)
+    return (value or default).strip()
+
+
+def _get_session(session_id: str) -> dict | None:
+    return SESSIONS.get(session_id)
+
+
+def _ensure_model(session: dict):
+    """Lazily initialise the Gemini model for this session."""
+    if session.get("model") is None:
+        system_prompt = get_system_prompt(session["sector"], session["lang"])
+        session["model"] = initialize_model(system_prompt)
+    return session["model"]
+
+
+@app.get("/")
+def index():
+    session_id = uuid.uuid4().hex
+    session = {
+        "employee_id": _first_param("id", config.DEFAULT_EMPLOYEE_ID),
+        "sector": _first_param("sector", config.DEFAULT_SECTOR),
+        "lang": _first_param("lang", config.DEFAULT_LANG),
+        "messages": [{"role": "assistant", "content": WELCOME_TEXT}],
+        "model": None,
+        "risk_category": "none",
+        "crisis": False,
+        "finished": False,
+    }
+    SESSIONS[session_id] = session
+    return render_template(
+        "index.html",
+        session_id=session_id,
+        employee_id=session["employee_id"],
+        sector=session["sector"],
+        language=language_label(session["lang"]),
+        chips=SUGGESTIONS,
+    )
+
+
+@app.post("/api/chat")
+def api_chat():
+    data = request.get_json(silent=True) or {}
+    session = _get_session(str(data.get("session_id", "")))
+    message = str(data.get("message", "")).strip()
+    if session is None or not message:
+        return jsonify({"error": "invalid session or empty message"}), 400
+    if session["crisis"] or session["finished"]:
+        return jsonify({"error": "conversation is closed"}), 409
+
+    session["messages"].append({"role": "user", "content": message})
+
+    # Deterministic crisis check runs before the model.
+    if detect_risk(message) == RISK_CRISIS:
+        session["risk_category"] = RISK_CRISIS
+        session["crisis"] = True
+        keywords = matched_keywords(message)
+        save_risk_flag(
+            session["employee_id"], session["sector"], session["lang"],
+            RISK_CRISIS, keywords, message,
+        )
+        send_admin_alert(
+            session["employee_id"], session["sector"], RISK_CRISIS,
+            keywords, message,
+        )
+        session["messages"].append({"role": "assistant", "content": CRISIS_MESSAGE})
+        return jsonify({"reply": CRISIS_MESSAGE, "crisis": True})
+
+    try:
+        model = _ensure_model(session)
+        reply = generate_response(model, session["messages"][:-1], message)
+    except GeminiUnavailableError as exc:
+        logger.warning("Gemini unavailable: %s", exc)
+        reply = FALLBACK_ERROR_MESSAGE
+
+    session["messages"].append({"role": "assistant", "content": reply})
+    return jsonify({"reply": reply, "crisis": False})
+
+
+@app.post("/api/finish")
+def api_finish():
+    data = request.get_json(silent=True) or {}
+    session = _get_session(str(data.get("session_id", "")))
+    if session is None:
+        return jsonify({"error": "invalid session"}), 400
+
+    try:
+        model = _ensure_model(session)
+    except GeminiUnavailableError:
+        model = None
+    summary = generate_summary(model, session["messages"], session["risk_category"])
+    session["finished"] = True
+
+    saved = save_chat_summary(
+        session["employee_id"], session["sector"], session["lang"], summary
+    )
+    if str(summary.get("human_support_requested", "")).lower() == "yes":
+        save_support_lead(
+            session["employee_id"], session["sector"], session["lang"],
+            "yes", summary.get("summary", ""),
+        )
+    return jsonify({"summary": summary, "saved": saved})
+
+
+@app.post("/api/callback")
+def api_callback():
+    data = request.get_json(silent=True) or {}
+    session = _get_session(str(data.get("session_id", "")))
+    if session is None:
+        return jsonify({"error": "invalid session"}), 400
+    notes = "Employee requested a callback from the chat sidebar."
+    saved = save_support_lead(
+        session["employee_id"], session["sector"], session["lang"], "yes", notes
+    )
+    send_support_request_alert(session["employee_id"], session["sector"], notes)
+    return jsonify({"saved": saved})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=False)

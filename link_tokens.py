@@ -100,9 +100,14 @@ def verify(token: str, secret: str | None = None) -> dict | None:
         return None
 
     payload_b64, _, provided = token.partition(".")
-    expected = _signature(payload_b64, key)
+    digest = hmac.new(key.encode(), payload_b64.encode(), hashlib.sha256).digest()
+    # Accept either encoding of the same HMAC: base64url (what sign() emits)
+    # or hex, which is what some automation tools (e.g. Make.com) produce.
     # Constant-time comparison keeps the check free of timing side channels.
-    if not hmac.compare_digest(expected, provided):
+    matches = hmac.compare_digest(_b64encode(digest), provided) or hmac.compare_digest(
+        digest.hex(), provided.lower()
+    )
+    if not matches:
         logger.warning("Rejected chat link: bad signature")
         return None
 

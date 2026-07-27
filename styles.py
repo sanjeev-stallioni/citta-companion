@@ -48,7 +48,7 @@ html, body, [class*="css"], .stApp, input, textarea, button, select {
 .stApp { background-color: var(--bg); color: var(--text); }
 /* Full-bleed main column (so the header bar spans the whole area, as in the
    design); the conversation itself is re-centred to 760px further below. */
-.block-container { max-width: 100% !important; padding: 0 26px 7rem !important; }
+.block-container { max-width: 100% !important; padding: 0 10px 7rem !important; }
 /* Hide Streamlit's chrome, but KEEP <header> and stToolbar alive: the
    "expand sidebar" button lives inside them and is only rendered while the
    rail is collapsed. Hiding them strands a collapsed sidebar. */
@@ -91,7 +91,7 @@ a:hover { color: var(--text); }
 [data-testid="stSidebarUserContent"], [data-testid="stSidebarHeader"],
 [data-testid="stSidebarCollapseButton"] { background-color: var(--panel) !important; }
 [data-testid="stSidebarHeader"] { border-bottom: none !important;
-    height: 0 !important; min-height: 0 !important; padding: 0 !important; }
+    height: 16px !important; min-height: 0 !important; padding: 0 !important; margin: 0; }
 /* Rail padding matches the design (22px 18px). */
 [data-testid="stSidebarContent"] { padding: 0 !important; }
 [data-testid="stSidebarUserContent"] { padding: 22px 18px !important; }
@@ -140,7 +140,7 @@ a:hover { color: var(--text); }
     border-top: none; border-radius: 0 0 14px 14px; padding: 0 16px 16px; }
 
 /* ---------- Header ---------- */
-.cc-head { display: flex; align-items: baseline; gap: 10px; }
+.cc-head { display: flex; align-items: baseline; column-gap: 10px; flex-wrap: wrap; }
 .cc-head .title { font-family: 'Newsreader', serif; font-size: 18px; white-space: nowrap; }
 .cc-head .sub { color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
 /* The injected <style> tag still occupies a flex child, and the column's 16px
@@ -148,7 +148,7 @@ a:hover { color: var(--text); }
 [data-testid="stElementContainer"]:has(style) { display: none !important; }
 /* Header bar: 64px tall, full width of the main area, single bottom rule. */
 [class*="st-key-hdr"] { height: 64px !important; min-height: 64px !important;
-    justify-content: center; margin: 0 -26px; padding: 0 26px;
+    justify-content: center; margin: 0 0; padding: 0 0;
     border-bottom: 1px solid var(--line); }
 [class*="st-key-hdr"] [data-testid="stHorizontalBlock"] { height: 64px; align-items: center; gap: 10px; }
 [class*="st-key-hdr"] [data-testid="stElementContainer"] { margin: 0 !important; }
@@ -161,7 +161,7 @@ a:hover { color: var(--text); }
 /* ---------- Day separator ---------- */
 .cc-day { display: flex; align-items: center; gap: 14px; color: var(--text-3); font-size: 10.5px;
     letter-spacing: .14em; text-transform: uppercase; margin: 4px auto 22px; }
-.cc-day::before, .cc-day::after { content: ""; flex: 1; height: 1px; background-color: var(--line); }
+.cc-day::before, .cc-day::after { content: ""; flex: 1; height: 1px; background-color: transparent; }
 
 /* ---------- Messages ---------- */
 .cc-row { display: flex; gap: 14px; margin: 22px 0; animation: rise .35s ease both; }
@@ -221,15 +221,14 @@ div[data-testid="stButton"] > button[kind="secondary"] * { color: inherit !impor
 button:focus-visible { outline: 3px solid var(--ring) !important; outline-offset: 2px; }
 
 /* ---------- Composer ---------- */
-[data-testid="stChatInput"] { background-color: var(--surface) !important; border: 1px solid var(--line-2) !important;
+[data-testid="stChatInput"] { background-color: var(--surface) !important;
     border-radius: 18px !important; box-shadow: var(--shadow) !important; }
 /* Inner wrappers/textarea carry their own theme background — force to surface */
 [data-testid="stChatInput"] > div, [data-testid="stChatInput"] div,
 [data-testid="stChatInputTextArea"], [data-testid="stChatInput"] textarea {
     background-color: var(--surface) !important; }
 [data-testid="stChatInput"] textarea { color: var(--text) !important; font-size: 14.5px !important; }
-[data-testid="stChatInput"]:focus-within { border-color: var(--accent) !important;
-    box-shadow: 0 0 0 3px var(--ring), var(--shadow) !important; }
+[data-testid="stChatInput"]:focus-within { border-color: var(--accent) !important; }
 [data-testid="stChatInput"] button { background-color: var(--accent) !important; color: var(--accent-ink) !important;
     border-radius: 12px !important; }
 [data-testid="stChatInput"] button svg { fill: var(--accent-ink) !important; color: var(--accent-ink) !important; }
@@ -250,7 +249,7 @@ button:focus-visible { outline: 3px solid var(--ring) !important; outline-offset
 
 /* ---------- Quick-reply chips: inline pills, indented under the bot card ---------- */
 [class*="st-key-chips"] [data-testid="stHorizontalBlock"] {
-    display: flex !important; flex-wrap: wrap; gap: 8px !important; margin: -10px 0 0 46px; }
+    display: flex !important; flex-wrap: wrap; gap: 8px !important; padding-left: 46px; }
 [class*="st-key-chips"] [data-testid="stColumn"] {
     width: auto !important; flex: 0 0 auto !important; min-width: 0 !important; }
 [class*="st-key-chips"] button { white-space: nowrap !important; }

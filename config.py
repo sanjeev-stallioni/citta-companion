@@ -35,7 +35,8 @@ def _get_env(key: str, default: str | None = None) -> str | None:
 # Application metadata
 # ---------------------------------------------------------------------------
 APP_TITLE = "Citta Companion"
-APP_ICON = "💚"
+# Browser-tab icon: the Citta lotus mark (square-padded so it isn't stretched).
+APP_ICON = str(BASE_DIR / "static" / "favicon.png")
 APP_SUBTITLE = "Employee Wellbeing Discovery"
 APP_LAYOUT = "centered"
 SIDEBAR_STATE = "collapsed"

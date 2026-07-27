@@ -50,16 +50,43 @@ _STATIC_CSS = """
 html, body, [class*="css"], .stApp, input, textarea, button, select {
     font-family: 'IBM Plex Sans', system-ui, sans-serif !important;
 }
+/* Material icons render via font ligatures — the rule above must not apply. */
+[data-testid="stIconMaterial"], .material-symbols-rounded, span[translate="no"] {
+    font-family: 'Material Symbols Rounded' !important; }
 .serif { font-family: 'Newsreader', serif !important; letter-spacing: -.01em; }
 .stApp { background-color: var(--bg); color: var(--text); }
 /* Full-bleed main column (so the header bar spans the whole area, as in the
    design); the conversation itself is re-centred to 760px further below. */
 .block-container { max-width: 100% !important; padding: 0 26px 7rem !important; }
-#MainMenu, header[data-testid="stHeader"], footer,
-[data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; }
-[data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"] {
-    display: flex !important; visibility: visible !important; top: 14px; left: 14px; z-index: 1200;
-}
+/* Hide Streamlit's chrome, but KEEP <header> alive: the "expand sidebar"
+   button lives inside it and is only rendered while the rail is collapsed.
+   Hiding the header made a collapsed sidebar impossible to bring back. */
+/* stToolbar holds BOTH the Deploy/menu actions and the expand-sidebar button,
+   so hide only the actions — hiding the toolbar strands a collapsed rail. */
+#MainMenu, footer, [data-testid="stDecoration"], [data-testid="stToolbarActions"],
+[data-testid="stAppDeployButton"], [data-testid="stMainMenu"] { display: none !important; }
+header[data-testid="stHeader"] { display: block !important; background: transparent !important;
+    height: 0 !important; min-height: 0 !important; box-shadow: none !important;
+    pointer-events: none !important; }
+[data-testid="stToolbar"] { display: flex !important; background: transparent !important;
+    pointer-events: none !important; }
+/* This element *is* the button (not a wrapper), so style it directly. */
+[data-testid="stExpandSidebarButton"] { pointer-events: auto !important;
+    position: fixed !important; top: 15px !important; left: 14px !important; z-index: 1300 !important;
+    width: 34px !important; height: 34px !important; border-radius: 10px !important;
+    background-color: var(--surface) !important; border: 1px solid var(--line) !important;
+    color: var(--text-2) !important; display: grid !important; place-items: center !important; }
+[data-testid="stExpandSidebarButton"]:hover { color: var(--text) !important;
+    border-color: var(--line-2) !important; }
+/* Streamlit's Material glyph doesn't paint reliably here, so draw the menu
+   icon with CSS instead (three rules, like the design's menu button). */
+[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"],
+[data-testid="stExpandSidebarButton"] > span { display: none !important; }
+[data-testid="stExpandSidebarButton"]::before { content: ""; width: 15px; height: 1.6px;
+    background-color: currentColor; border-radius: 2px;
+    box-shadow: 0 5px 0 currentColor, 0 -5px 0 currentColor; }
+/* Keep the header title clear of that button while the rail is collapsed. */
+.stApp:has([data-testid="stExpandSidebarButton"]) [class*="st-key-hdr"] { padding-left: 60px; }
 h1,h2,h3,h4 { color: var(--text); }
 p, li, span, label, div { color: var(--text); }
 a { color: var(--accent); text-decoration: none; }
@@ -68,7 +95,7 @@ a:hover { color: var(--text); }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ---------- Sidebar ---------- */
-[data-testid="stSidebar"] { width: 292px !important; min-width: 292px !important;
+[data-testid="stSidebar"] { width: 292px !important; min-width: 0 !important;
     background-color: var(--panel) !important; border-right: 1px solid var(--line); }
 /* Streamlit paints inner sidebar containers with the theme colour — override all */
 [data-testid="stSidebar"] > div, [data-testid="stSidebarContent"],

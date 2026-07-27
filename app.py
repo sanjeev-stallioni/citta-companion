@@ -18,7 +18,7 @@ import streamlit as st
 
 import config
 import styles
-from email_service import send_admin_alert
+from email_service import send_admin_alert, send_support_request_alert
 from gemini_service import (
     GeminiUnavailableError,
     generate_response,
@@ -58,9 +58,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Theme defaults to light; a header toggle flips it. Inject styles each run.
+# Theme defaults to dark (as in the reference design); the header toggle flips
+# it. Styles are re-injected each run.
 if "theme" not in st.session_state:
-    st.session_state.theme = "light"
+    st.session_state.theme = "dark"
 styles.inject(st.session_state.theme)
 
 
@@ -123,6 +124,13 @@ def render_sidebar() -> None:
             status_label=conversation_status(),
             status_kind=status_chip_kind(),
         )
+        # The support card is pushed to the bottom of the rail by CSS
+        # (`margin-top:auto`), matching the reference design.
+        styles.render_support_card()
+        with st.container(key="cbwrap"):
+            if st.button("Request a callback", key="cb_btn",
+                         use_container_width=True):
+                _request_callback()
 
 
 def _theme_toggle(col_light, col_dark, key: str) -> None:
@@ -143,28 +151,29 @@ def _theme_toggle(col_light, col_dark, key: str) -> None:
 
 
 def render_header() -> None:
-    """Header row: title, light/dark toggle, and icons."""
-    left, tog_l, tog_d, icons = st.columns([7.4, 0.7, 0.7, 1.2])
-    with left:
-        st.markdown(styles.render_header_left(), unsafe_allow_html=True)
-    _theme_toggle(tog_l, tog_d, "header")
-    with icons:
-        styles.render_header_icons()
+    """Header bar: title on the left, light/dark toggle on the right."""
+    with st.container(key="hdr"):
+        left, tog_l, tog_d = st.columns([9.2, 0.55, 0.55], vertical_alignment="center")
+        with left:
+            st.markdown(styles.render_header_left(), unsafe_allow_html=True)
+        _theme_toggle(tog_l, tog_d, "header")
     styles.header_divider()
 
 
-def render_consent_screen() -> None:
-    """Opening screen with branding, disclaimer and consent gate."""
-    _, tog_l, tog_d = st.columns([8.6, 0.7, 0.7])
-    _theme_toggle(tog_l, tog_d, "consent")
-
-    styles.render_consent_hero()
-    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-    _, mid, _ = st.columns([1, 2, 1])
-    with mid:
-        if st.button("I Understand  →", type="primary", use_container_width=True):
-            st.session_state.consented = True
-            st.rerun()
+def _request_callback() -> None:
+    """Log a human-support request from the sidebar button."""
+    notes = "Employee requested a callback from the chat sidebar."
+    save_support_lead(
+        st.session_state.employee_id,
+        st.session_state.sector,
+        st.session_state.lang,
+        "yes",
+        notes,
+    )
+    send_support_request_alert(
+        st.session_state.employee_id, st.session_state.sector, notes
+    )
+    st.session_state.callback_requested = True
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +303,6 @@ def render_chat() -> None:
         return
 
     # Quick-reply chips (functional — clicking sends that prompt).
-    styles.chips_label("Quick replies")
     with st.container(key="chips"):
         chip_cols = st.columns(len(SUGGESTIONS), gap="small")
         for col, text in zip(chip_cols, SUGGESTIONS):
@@ -306,11 +314,10 @@ def render_chat() -> None:
     if user_message:
         handle_turn(user_message)
 
-    # Finish action.
+    # Finish action — rendered as a chip alongside the quick replies.
     if len(st.session_state.messages) > 2:
-        _, right = st.columns([3, 1])
-        with right:
-            if st.button("Finish Conversation", type="primary", use_container_width=True):
+        with st.container(key="finish"):
+            if st.button("Finish conversation", key="finish_btn"):
                 handle_finish_conversation()
                 st.rerun()
 
@@ -322,11 +329,8 @@ def main() -> None:
     init_session_state()
     load_params_once()
     render_sidebar()
-
-    if not st.session_state.consented:
-        render_consent_screen()
-        return
-
+    # The reference design opens straight into the conversation — the safe
+    # disclaimer is carried by the welcome card itself, per the project scope.
     render_chat()
 
 

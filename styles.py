@@ -52,7 +52,9 @@ html, body, [class*="css"], .stApp, input, textarea, button, select {
 }
 .serif { font-family: 'Newsreader', serif !important; letter-spacing: -.01em; }
 .stApp { background-color: var(--bg); color: var(--text); }
-.block-container { max-width: 820px; padding-top: 1.1rem; padding-bottom: 7rem; }
+/* Full-bleed main column (so the header bar spans the whole area, as in the
+   design); the conversation itself is re-centred to 760px further below. */
+.block-container { max-width: 100% !important; padding: 0 26px 7rem !important; }
 #MainMenu, header[data-testid="stHeader"], footer,
 [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; }
 [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"] {
@@ -72,8 +74,24 @@ a:hover { color: var(--text); }
 [data-testid="stSidebar"] > div, [data-testid="stSidebarContent"],
 [data-testid="stSidebarUserContent"], [data-testid="stSidebarHeader"],
 [data-testid="stSidebarCollapseButton"] { background-color: var(--panel) !important; }
-[data-testid="stSidebarHeader"] { border-bottom: none !important; }
-[data-testid="stSidebar"] .block-container, [data-testid="stSidebar"] > div { padding-top: 1.2rem; }
+[data-testid="stSidebarHeader"] { border-bottom: none !important;
+    height: 0 !important; min-height: 0 !important; padding: 0 !important; }
+/* Rail padding matches the design (22px 18px) and the content becomes a flex
+   column so the support card can be pushed to the bottom. */
+[data-testid="stSidebarContent"] { padding: 0 !important; }
+[data-testid="stSidebarUserContent"] { padding: 22px 18px !important; }
+[data-testid="stSidebarUserContent"] > div > div[data-testid="stVerticalBlock"] {
+    min-height: calc(100vh - 44px); display: flex; flex-direction: column; gap: 0; }
+/* Streamlit drops empty containers, so the support card is pushed down with
+   margin-top:auto instead of a spacer element. */
+[data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:has(.cc-support) {
+    margin-top: auto !important; }
+[class*="st-key-cbwrap"] button { border-radius: 9px !important; padding: 9px 12px !important;
+    font-size: 12.5px !important; border: 1px solid var(--accent) !important;
+    background: transparent !important; color: var(--accent) !important; }
+[class*="st-key-cbwrap"] button:hover { background-color: var(--accent) !important;
+    color: var(--accent-ink) !important; }
+[class*="st-key-cbwrap"] button * { color: inherit !important; }
 .cc-sb-brand { display: flex; gap: 12px; align-items: center; margin-bottom: 4px; }
 .cc-sb-brand .badge { width: 42px; height: 42px; border-radius: 13px; flex: none; display: grid; place-items: center;
     background-color: var(--accent); color: var(--accent-ink); }
@@ -114,26 +132,37 @@ a:hover { color: var(--text); }
 .cc-pill.live .dot { width: 5px; height: 5px; border-radius: 99px; background-color: var(--accent); }
 .cc-pill.crit { background-color: var(--danger-bg); color: var(--danger-tx); border: 1px solid var(--danger-bd); }
 
-.cc-support { margin-top: 20px; border-radius: 14px; padding: 16px; background-color: var(--surface);
-    border: 1px solid var(--line-2); }
+.cc-support { border-radius: 14px 14px 0 0; padding: 16px 16px 10px; background-color: var(--surface);
+    border: 1px solid var(--line-2); border-bottom: none; }
 .cc-support .t { font-family: 'Newsreader', serif; font-size: 17px; margin-bottom: 6px; }
 .cc-support .s { color: var(--text-2); font-size: 12.5px; line-height: 1.55; }
+/* The callback button lives in its own Streamlit block, so the card is drawn
+   as two halves that visually join. */
+[class*="st-key-cbwrap"] { background-color: var(--surface); border: 1px solid var(--line-2);
+    border-top: none; border-radius: 0 0 14px 14px; padding: 0 16px 16px; }
 
 /* ---------- Header ---------- */
 .cc-head { display: flex; align-items: baseline; gap: 10px; }
-.cc-head .title { font-family: 'Newsreader', serif; font-size: 20px; }
-.cc-head .sub { color: var(--text-3); font-size: 12.5px; }
-.cc-head-icons { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
-.cc-head-icons .ic { width: 34px; height: 34px; border-radius: 10px; background-color: var(--surface);
-    border: 1px solid var(--line); color: var(--text-2); display: grid; place-items: center; }
-.cc-head-icons .ic svg { width: 16px; height: 16px; }
-.cc-head-icons .ava { width: 34px; height: 34px; border-radius: 99px; background-color: var(--surface-2);
-    border: 1px solid var(--line-2); color: var(--text-2); display: grid; place-items: center; }
-.cc-divider { height: 1px; background-color: var(--line); margin: 12px 0 22px; }
+.cc-head .title { font-family: 'Newsreader', serif; font-size: 18px; white-space: nowrap; }
+.cc-head .sub { color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
+/* The injected <style> tag still occupies a flex child, and the column's 16px
+   gap would push the header down — collapse those wrappers. */
+[data-testid="stElementContainer"]:has(style) { display: none !important; }
+/* Header bar: 64px tall, full width of the main area, single bottom rule. */
+[class*="st-key-hdr"] { height: 64px !important; min-height: 64px !important;
+    justify-content: center; margin: 0 -26px; padding: 0 26px;
+    border-bottom: 1px solid var(--line); }
+[class*="st-key-hdr"] [data-testid="stHorizontalBlock"] { height: 64px; align-items: center; gap: 10px; }
+[class*="st-key-hdr"] [data-testid="stElementContainer"] { margin: 0 !important; }
+.cc-divider { height: 22px; }
+
+/* ---------- Conversation column: re-centred to the design's 760px ---------- */
+.cc-day, .cc-row, .cc-grid, .cc-panel { max-width: 760px; margin-left: auto !important; margin-right: auto !important; }
+[class*="st-key-chips"] { max-width: 760px; margin: 0 auto; }
 
 /* ---------- Day separator ---------- */
 .cc-day { display: flex; align-items: center; gap: 14px; color: var(--text-3); font-size: 10.5px;
-    letter-spacing: .14em; text-transform: uppercase; margin: 4px 0 22px; }
+    letter-spacing: .14em; text-transform: uppercase; margin: 4px auto 22px; }
 .cc-day::before, .cc-day::after { content: ""; flex: 1; height: 1px; background-color: var(--line); }
 
 /* ---------- Messages ---------- */
@@ -167,6 +196,7 @@ a:hover { color: var(--text); }
 .cc-bubble { background-color: var(--bubble-user); color: var(--bubble-user-ink); border-radius: 16px 4px 16px 16px;
     padding: 14px 18px; line-height: 1.6; font-size: 14.5px; }
 .cc-bubble * { color: var(--bubble-user-ink) !important; }
+.cc-bubble p { margin: 0; } .cc-bubble p + p { margin-top: 9px; }
 .cc-crisis { background-color: var(--danger-bg); border: 1px solid var(--danger-bd); color: var(--danger-tx);
     border-radius: 4px 16px 16px 16px; padding: 16px 20px; line-height: 1.6; font-size: 14px; }
 .cc-crisis strong { color: var(--text); }
@@ -211,20 +241,25 @@ button:focus-visible { outline: 3px solid var(--ring) !important; outline-offset
 /* Bottom-pinned composer area: theme background, width aligned to content column */
 [data-testid="stBottom"] { background-color: var(--bg) !important; position: relative; }
 [data-testid="stBottom"] > div { background-color: var(--bg) !important; padding-bottom: 34px; }
-[data-testid="stChatInput"] { max-width: 788px !important; margin: 0 auto !important; }
-[data-testid="stBottom"]::before { content: "Confidential · Not an emergency service";
-    position: absolute; bottom: 10px; left: max(26px, calc((100% - 788px) / 2 + 6px));
-    font-size: 11.5px; color: var(--text-3); }
+[data-testid="stChatInput"] { max-width: 760px !important; margin: 0 auto !important; }
+/* ::before paints beneath the composer's opaque background — lift it. */
+[data-testid="stBottom"]::before { content: "Confidential · If you're in crisis, reach a human now";
+    position: absolute; bottom: 12px; left: max(26px, calc((100% - 760px) / 2 + 4px));
+    font-size: 11.5px; color: var(--text-3); z-index: 5; }
 [data-testid="stBottom"]::after { content: "Enter to send";
-    position: absolute; bottom: 10px; right: max(26px, calc((100% - 788px) / 2 + 6px));
+    position: absolute; bottom: 12px; right: max(26px, calc((100% - 760px) / 2 + 4px));
     font-size: 11.5px; color: var(--text-3); }
 
 /* ---------- Quick-reply chips: inline pills, indented under the bot card ---------- */
 [class*="st-key-chips"] [data-testid="stHorizontalBlock"] {
-    display: flex !important; flex-wrap: wrap; gap: 8px !important; margin-left: 46px; }
+    display: flex !important; flex-wrap: wrap; gap: 8px !important; margin: -10px 0 0 46px; }
 [class*="st-key-chips"] [data-testid="stColumn"] {
     width: auto !important; flex: 0 0 auto !important; min-width: 0 !important; }
 [class*="st-key-chips"] button { white-space: nowrap !important; }
+/* "Finish conversation" sits with the chips, indented under the bot card. */
+[class*="st-key-finish"] { max-width: 760px; margin: 8px auto 0; }
+[class*="st-key-finish"] [data-testid="stElementContainer"] { margin-left: 46px; }
+[class*="st-key-finish"] button { white-space: nowrap !important; }
 
 /* ---------- Theme toggle pill (icon buttons) ---------- */
 [class*="st-key-tl_"] button, [class*="st-key-td_"] button {
@@ -370,11 +405,18 @@ def render_sidebar(*, sector: str, language: str, employee_id: str,
             <div class="row"><span class="k">Current risk</span><span class="{risk_cls}">{risk_label}</span></div>
             <div class="row"><span class="k">Status</span>{status_html}</div>
         </div>
-        <div class="cc-support">
-            <div class="t">Prefer a human?</div>
-            <div class="s">You can ask to speak with a wellbeing professional at any time.</div>
-        </div>
         """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_support_card() -> None:
+    """The 'Prefer a human?' card pinned to the bottom of the rail."""
+    st.markdown(
+        '<div class="cc-support">'
+        '<div class="t">Prefer a human?</div>'
+        '<div class="s">You can ask to speak with a wellbeing professional '
+        "at any time.</div></div>",
         unsafe_allow_html=True,
     )
 
@@ -386,13 +428,6 @@ def render_header_left() -> str:
         '<span class="sub">Private · not shared with your employer</span></div>'
     )
 
-
-def render_header_icons() -> None:
-    st.markdown(
-        f'<div class="cc-head-icons"><span class="ic">{IC["shield"]}</span>'
-        f'<span class="ava">{IC["person"]}</span></div>',
-        unsafe_allow_html=True,
-    )
 
 
 def header_divider() -> None:
@@ -447,26 +482,6 @@ def render_crisis_message(content: str, ts: str) -> None:
     st.markdown(_bot_shell(inner, ts), unsafe_allow_html=True)
 
 
-def chips_label(text: str) -> None:
-    st.markdown(f'<div class="cc-chiplabel">{text}</div>', unsafe_allow_html=True)
-
-
-def render_consent_hero() -> None:
-    st.markdown(
-        f"""
-        <div class="cc-consent">
-            <div class="badge">{HEART}</div>
-            <h1>{config.APP_TITLE}</h1>
-            <div class="sub">{config.APP_SUBTITLE}</div>
-        </div>
-        <div class="cc-panel" style="margin-top:22px">
-            <p class="cc-lead">A calm, private space to reflect on how your work life is feeling.
-            Your responses stay confidential and are <b>never shared with your employer</b>.</p>
-            <div class="cc-note" style="margin-top:16px">{IC['lock']}{config.DISCLAIMER_TEXT}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def render_summary_grid(pairs: list[tuple[str, str]]) -> None:

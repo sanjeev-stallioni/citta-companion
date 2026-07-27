@@ -18,7 +18,7 @@ import streamlit as st
 
 import config
 import styles
-from email_service import send_admin_alert, send_support_request_alert
+from email_service import send_admin_alert
 from gemini_service import (
     GeminiUnavailableError,
     generate_response,
@@ -124,13 +124,6 @@ def render_sidebar() -> None:
             status_label=conversation_status(),
             status_kind=status_chip_kind(),
         )
-        # The support card is pushed to the bottom of the rail by CSS
-        # (`margin-top:auto`), matching the reference design.
-        styles.render_support_card()
-        with st.container(key="cbwrap"):
-            if st.button("Request a callback", key="cb_btn",
-                         use_container_width=True):
-                _request_callback()
 
 
 def _theme_toggle(col_light, col_dark, key: str) -> None:
@@ -158,22 +151,6 @@ def render_header() -> None:
             st.markdown(styles.render_header_left(), unsafe_allow_html=True)
         _theme_toggle(tog_l, tog_d, "header")
     styles.header_divider()
-
-
-def _request_callback() -> None:
-    """Log a human-support request from the sidebar button."""
-    notes = "Employee requested a callback from the chat sidebar."
-    save_support_lead(
-        st.session_state.employee_id,
-        st.session_state.sector,
-        st.session_state.lang,
-        "yes",
-        notes,
-    )
-    send_support_request_alert(
-        st.session_state.employee_id, st.session_state.sector, notes
-    )
-    st.session_state.callback_requested = True
 
 
 # ---------------------------------------------------------------------------

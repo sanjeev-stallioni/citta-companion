@@ -58,11 +58,9 @@ html, body, [class*="css"], .stApp, input, textarea, button, select {
 /* Full-bleed main column (so the header bar spans the whole area, as in the
    design); the conversation itself is re-centred to 760px further below. */
 .block-container { max-width: 100% !important; padding: 0 26px 7rem !important; }
-/* Hide Streamlit's chrome, but KEEP <header> alive: the "expand sidebar"
-   button lives inside it and is only rendered while the rail is collapsed.
-   Hiding the header made a collapsed sidebar impossible to bring back. */
-/* stToolbar holds BOTH the Deploy/menu actions and the expand-sidebar button,
-   so hide only the actions — hiding the toolbar strands a collapsed rail. */
+/* Hide Streamlit's chrome, but KEEP <header> and stToolbar alive: the
+   "expand sidebar" button lives inside them and is only rendered while the
+   rail is collapsed. Hiding them strands a collapsed sidebar. */
 #MainMenu, footer, [data-testid="stDecoration"], [data-testid="stToolbarActions"],
 [data-testid="stAppDeployButton"], [data-testid="stMainMenu"] { display: none !important; }
 header[data-testid="stHeader"] { display: block !important; background: transparent !important;
@@ -103,22 +101,10 @@ a:hover { color: var(--text); }
 [data-testid="stSidebarCollapseButton"] { background-color: var(--panel) !important; }
 [data-testid="stSidebarHeader"] { border-bottom: none !important;
     height: 0 !important; min-height: 0 !important; padding: 0 !important; }
-/* Rail padding matches the design (22px 18px) and the content becomes a flex
-   column so the support card can be pushed to the bottom. */
+/* Rail padding matches the design (22px 18px). */
 [data-testid="stSidebarContent"] { padding: 0 !important; }
 [data-testid="stSidebarUserContent"] { padding: 22px 18px !important; }
-[data-testid="stSidebarUserContent"] > div > div[data-testid="stVerticalBlock"] {
-    min-height: calc(100vh - 44px); display: flex; flex-direction: column; gap: 0; }
-/* Streamlit drops empty containers, so the support card is pushed down with
-   margin-top:auto instead of a spacer element. */
-[data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:has(.cc-support) {
-    margin-top: auto !important; }
-[class*="st-key-cbwrap"] button { border-radius: 9px !important; padding: 9px 12px !important;
-    font-size: 12.5px !important; border: 1px solid var(--accent) !important;
-    background: transparent !important; color: var(--accent) !important; }
-[class*="st-key-cbwrap"] button:hover { background-color: var(--accent) !important;
-    color: var(--accent-ink) !important; }
-[class*="st-key-cbwrap"] button * { color: inherit !important; }
+[data-testid="stSidebarUserContent"] > div > div[data-testid="stVerticalBlock"] { gap: 0; }
 .cc-sb-brand { display: flex; gap: 12px; align-items: center; margin-bottom: 4px; }
 .cc-sb-brand .badge { width: 42px; height: 42px; border-radius: 13px; flex: none; display: grid; place-items: center;
     background-color: var(--accent); color: var(--accent-ink); }
@@ -159,12 +145,6 @@ a:hover { color: var(--text); }
 .cc-pill.live .dot { width: 5px; height: 5px; border-radius: 99px; background-color: var(--accent); }
 .cc-pill.crit { background-color: var(--danger-bg); color: var(--danger-tx); border: 1px solid var(--danger-bd); }
 
-.cc-support { border-radius: 14px 14px 0 0; padding: 16px 16px 10px; background-color: var(--surface);
-    border: 1px solid var(--line-2); border-bottom: none; }
-.cc-support .t { font-family: 'Newsreader', serif; font-size: 17px; margin-bottom: 6px; }
-.cc-support .s { color: var(--text-2); font-size: 12.5px; line-height: 1.55; }
-/* The callback button lives in its own Streamlit block, so the card is drawn
-   as two halves that visually join. */
 [class*="st-key-cbwrap"] { background-color: var(--surface); border: 1px solid var(--line-2);
     border-top: none; border-radius: 0 0 14px 14px; padding: 0 16px 16px; }
 
@@ -440,16 +420,6 @@ def render_sidebar(*, sector: str, language: str, employee_id: str,
         unsafe_allow_html=True,
     )
 
-
-def render_support_card() -> None:
-    """The 'Prefer a human?' card pinned to the bottom of the rail."""
-    st.markdown(
-        '<div class="cc-support">'
-        '<div class="t">Prefer a human?</div>'
-        '<div class="s">You can ask to speak with a wellbeing professional '
-        "at any time.</div></div>",
-        unsafe_allow_html=True,
-    )
 
 
 def render_header_left() -> str:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 import config
+import link_tokens
 from risk_detection import (
     RISK_CRISIS,
     RISK_LOW,
@@ -13,10 +14,16 @@ from risk_detection import (
 )
 
 
-def get_query_params() -> dict[str, str]:
-    """Read ``id``, ``sector`` and ``lang`` from the URL query string.
+def get_query_params() -> dict:
+    """Resolve the employee context from the URL.
 
-    Falls back to sensible defaults from :mod:`config`.
+    With ``LINK_SECRET`` configured the app accepts only a signed ``?t=``
+    token, so the employee ID/sector/language cannot be edited by hand. The
+    returned dict carries a ``valid`` flag; the caller must refuse to start a
+    conversation when it is ``False``.
+
+    Without a secret (local development) the legacy plain parameters are
+    still honoured.
     """
     params = st.query_params
 
@@ -26,10 +33,23 @@ def get_query_params() -> dict[str, str]:
             value = value[0] if value else default
         return (value or default).strip()
 
+    defaults = {
+        "employee_id": config.DEFAULT_EMPLOYEE_ID,
+        "sector": config.DEFAULT_SECTOR,
+        "lang": config.DEFAULT_LANG,
+    }
+
+    if config.LINK_SECRET:
+        data = link_tokens.verify(_first("t", ""))
+        if data is None:
+            return {**defaults, "valid": False}
+        return {**data, "valid": True}
+
     return {
-        "employee_id": _first("id", config.DEFAULT_EMPLOYEE_ID),
-        "sector": _first("sector", config.DEFAULT_SECTOR),
-        "lang": _first("lang", config.DEFAULT_LANG),
+        "employee_id": _first("id", defaults["employee_id"]),
+        "sector": _first("sector", defaults["sector"]),
+        "lang": _first("lang", defaults["lang"]),
+        "valid": True,
     }
 
 
@@ -83,6 +103,7 @@ def init_session_state() -> None:
         "employee_id": config.DEFAULT_EMPLOYEE_ID,
         "sector": config.DEFAULT_SECTOR,
         "lang": config.DEFAULT_LANG,
+        "link_valid": True,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)

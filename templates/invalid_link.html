@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citta Companion</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F6F2EA; --surface:#FFFFFF; --line:rgba(35,27,15,.10); --line-2:rgba(35,27,15,.18);
+  --text:#241E16; --text-2:#6B6055; --accent:#8A6420; --accent-ink:#FFFFFF;
+  --shadow:0 1px 2px rgba(60,46,20,.07),0 10px 28px rgba(60,46,20,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background-color:var(--bg);color:var(--text);display:grid;place-items:center;
+  padding:24px;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:520px;text-align:center}
+.badge{width:74px;height:74px;border-radius:20px;margin:0 auto 18px;display:grid;
+  place-items:center;background-color:var(--accent)}
+.badge span{display:block;width:44px;height:44px;background-color:var(--accent-ink);
+  -webkit-mask:url(/static/logo-mark-v2.png) center/contain no-repeat;
+  mask:url(/static/logo-mark-v2.png) center/contain no-repeat}
+h1{font-family:Newsreader,serif;font-size:34px;font-weight:500;margin:0}
+.sub{color:var(--text-2);margin-top:6px;font-size:13px}
+.panel{background-color:var(--surface);border:1px solid var(--line);border-radius:16px;
+  padding:22px 24px;box-shadow:var(--shadow);margin-top:22px;text-align:left;
+  line-height:1.65;color:var(--text-2)}
+.panel b{color:var(--text)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="badge"><span></span></div>
+    <h1>Citta Companion</h1>
+    <div class="sub">Employee Wellbeing Discovery</div>
+    <div class="panel">
+      <p style="margin:0 0 10px"><b>This link isn't valid.</b></p>
+      <p style="margin:0">Please open Citta Companion using the personal link from
+      your invitation email. If the link has expired or isn't working, contact your
+      wellbeing team for a new one.</p>
+    </div>
+  </div>
+</body>
+</html>

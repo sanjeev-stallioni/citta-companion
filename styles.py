@@ -468,6 +468,27 @@ def render_summary_grid(pairs: list[tuple[str, str]]) -> None:
     st.markdown(f'<div class="cc-grid">{tiles}</div>', unsafe_allow_html=True)
 
 
+def render_invalid_link() -> None:
+    """Shown when the URL has no valid signed token."""
+    st.markdown(
+        f"""
+        <div class="cc-consent">
+            <div class="badge">{HEART}</div>
+            <h1>{config.APP_TITLE}</h1>
+            <div class="sub">{config.APP_SUBTITLE}</div>
+        </div>
+        <div class="cc-panel" style="margin-top:22px;max-width:560px;
+             margin-left:auto;margin-right:auto">
+            <p class="cc-lead" style="margin:0 0 10px"><b>This link isn't valid.</b></p>
+            <p class="cc-lead" style="margin:0">Please open Citta Companion using the
+            personal link from your invitation email. If the link has expired or
+            isn't working, contact your wellbeing team for a new one.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_summary_card(summary: str, recommendation: str) -> None:
     st.markdown(
         f'<div class="cc-panel" style="margin-top:12px"><p class="cc-lead" style="margin:0 0 8px">'

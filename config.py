@@ -85,6 +85,18 @@ ADMIN_ALERT_EMAIL = _get_env("ADMIN_ALERT_EMAIL", "wellbeing-admin@example.com")
 # ---------------------------------------------------------------------------
 # Defaults for URL parameters
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Signed chat links
+# ---------------------------------------------------------------------------
+# Shared secret used to sign the employee link (see link_tokens.py). When set,
+# the app ONLY accepts URLs carrying a valid ?t=<token>; hand-typed
+# ?id=...&sector=... links are refused. Leave empty for local development.
+LINK_SECRET = _get_env("LINK_SECRET")
+# Days a link stays valid; 0 = never expires.
+LINK_TTL_DAYS = int(_get_env("LINK_TTL_DAYS", "0") or "0")
+# Public base URL, used when generating links.
+APP_BASE_URL = _get_env("APP_BASE_URL", "http://localhost:8501")
+
 DEFAULT_EMPLOYEE_ID = "UNKNOWN"
 DEFAULT_SECTOR = "General"
 DEFAULT_LANG = "en"

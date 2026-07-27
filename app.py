@@ -73,6 +73,7 @@ def load_params_once() -> None:
         st.session_state.employee_id = params["employee_id"]
         st.session_state.sector = params["sector"]
         st.session_state.lang = params["lang"]
+        st.session_state.link_valid = params["valid"]
         st.session_state.params_loaded = True
 
 
@@ -283,6 +284,12 @@ def render_chat() -> None:
 def main() -> None:
     init_session_state()
     load_params_once()
+
+    # A missing or tampered link must never open a conversation.
+    if not st.session_state.link_valid:
+        styles.render_invalid_link()
+        return
+
     render_sidebar()
     # The reference design opens straight into the conversation — the safe
     # disclaimer is carried by the welcome card itself, per the project scope.

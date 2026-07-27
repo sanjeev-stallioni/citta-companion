@@ -19,6 +19,7 @@ import uuid
 from flask import Flask, jsonify, render_template, request
 
 import config
+import link_tokens
 from email_service import send_admin_alert, send_support_request_alert
 from gemini_service import (
     GeminiUnavailableError,
@@ -74,11 +75,22 @@ def _ensure_model(session: dict):
 
 @app.get("/")
 def index():
+    # With a signing secret configured, only signed links may open a chat.
+    if config.LINK_SECRET:
+        link = link_tokens.verify(request.args.get("t", ""))
+        if link is None:
+            return render_template("invalid_link.html"), 403
+        employee_id, sector, lang = link["employee_id"], link["sector"], link["lang"]
+    else:
+        employee_id = _first_param("id", config.DEFAULT_EMPLOYEE_ID)
+        sector = _first_param("sector", config.DEFAULT_SECTOR)
+        lang = _first_param("lang", config.DEFAULT_LANG)
+
     session_id = uuid.uuid4().hex
     session = {
-        "employee_id": _first_param("id", config.DEFAULT_EMPLOYEE_ID),
-        "sector": _first_param("sector", config.DEFAULT_SECTOR),
-        "lang": _first_param("lang", config.DEFAULT_LANG),
+        "employee_id": employee_id,
+        "sector": sector,
+        "lang": lang,
         "messages": [{"role": "assistant", "content": WELCOME_TEXT}],
         "model": None,
         "risk_category": "none",

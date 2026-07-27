@@ -21,15 +21,6 @@ import config
 # ---------------------------------------------------------------------------
 # Theme tokens (verbatim from the reference design)
 # ---------------------------------------------------------------------------
-_DARK = {
-    "--bg": "#14120F", "--panel": "#1A1714", "--surface": "#211D18", "--surface-2": "#292319",
-    "--line": "rgba(255,255,255,.08)", "--line-2": "rgba(255,255,255,.15)",
-    "--text": "#F3EDE4", "--text-2": "#AEA398", "--text-3": "#877C71",
-    "--accent": "#C9A45C", "--accent-soft": "rgba(201,164,92,.14)", "--accent-ink": "#1B1409",
-    "--bubble-user": "#B7924D", "--bubble-user-ink": "#1B1409",
-    "--shadow": "0 1px 2px rgba(0,0,0,.5)", "--ring": "rgba(201,164,92,.35)",
-    "--danger-bg": "#3A211C", "--danger-bd": "#7A3B32", "--danger-tx": "#F4C7BE",
-}
 _LIGHT = {
     "--bg": "#F6F2EA", "--panel": "#FFFDF9", "--surface": "#FFFFFF", "--surface-2": "#F1E9DB",
     "--line": "rgba(35,27,15,.10)", "--line-2": "rgba(35,27,15,.18)",
@@ -268,21 +259,7 @@ button:focus-visible { outline: 3px solid var(--ring) !important; outline-offset
 [class*="st-key-finish"] [data-testid="stElementContainer"] { margin-left: 46px; }
 [class*="st-key-finish"] button { white-space: nowrap !important; }
 
-/* ---------- Theme toggle pill (icon buttons) ---------- */
-[class*="st-key-tl_"] button, [class*="st-key-td_"] button {
-    min-height: 28px !important; height: 28px !important; padding: 0 10px !important;
-    border-radius: 99px !important; font-size: 13px !important;
-}
-[class*="st-key-tl_"] button[kind="secondary"], [class*="st-key-td_"] button[kind="secondary"] {
-    background-color: var(--surface) !important; border: 1px solid var(--line) !important;
-    color: var(--text-3) !important;
-}
-[class*="st-key-tl_"] button[kind="primary"], [class*="st-key-td_"] button[kind="primary"] {
-    background-color: var(--accent) !important; color: var(--accent-ink) !important;
-}
-[class*="st-key-tl_"] button span, [class*="st-key-td_"] button span { color: inherit !important; }
-
-/* ---------- Streamlit alerts follow the theme ---------- */
+/* ---------- Streamlit alerts follow the palette ---------- */
 [data-testid="stAlert"] { background-color: var(--surface) !important; border: 1px solid var(--line) !important;
     border-radius: 12px !important; }
 [data-testid="stAlert"] * { color: var(--text) !important; }
@@ -364,10 +341,9 @@ IC = {
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def inject(theme: str = "light") -> None:
-    """Inject fonts + theme variables + component CSS. Re-run each render."""
-    tokens = _LIGHT if theme == "light" else _DARK
-    root = ":root{" + ";".join(f"{k}:{v}" for k, v in tokens.items()) + "}"
+def inject() -> None:
+    """Inject fonts + palette + component CSS. Re-run each render."""
+    root = ":root{" + ";".join(f"{k}:{v}" for k, v in _LIGHT.items()) + "}"
     st.markdown(f"<style>{_FONTS}{root}{_STATIC_CSS}</style>", unsafe_allow_html=True)
 
 

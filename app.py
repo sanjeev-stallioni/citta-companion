@@ -60,9 +60,7 @@ st.set_page_config(
 
 # Theme defaults to dark (as in the reference design); the header toggle flips
 # it. Styles are re-injected each run.
-if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
-styles.inject(st.session_state.theme)
+styles.inject()
 
 
 # ---------------------------------------------------------------------------
@@ -126,30 +124,10 @@ def render_sidebar() -> None:
         )
 
 
-def _theme_toggle(col_light, col_dark, key: str) -> None:
-    """Render the light/dark icon-pill toggle into two given columns."""
-    theme = st.session_state.theme
-    with col_light:
-        if st.button(":material/light_mode:", key=f"tl_{key}",
-                     type="primary" if theme == "light" else "secondary",
-                     use_container_width=True):
-            st.session_state.theme = "light"
-            st.rerun()
-    with col_dark:
-        if st.button(":material/dark_mode:", key=f"td_{key}",
-                     type="primary" if theme == "dark" else "secondary",
-                     use_container_width=True):
-            st.session_state.theme = "dark"
-            st.rerun()
-
-
 def render_header() -> None:
-    """Header bar: title on the left, light/dark toggle on the right."""
+    """Header bar: title and privacy note."""
     with st.container(key="hdr"):
-        left, tog_l, tog_d = st.columns([9.2, 0.55, 0.55], vertical_alignment="center")
-        with left:
-            st.markdown(styles.render_header_left(), unsafe_allow_html=True)
-        _theme_toggle(tog_l, tog_d, "header")
+        st.markdown(styles.render_header_left(), unsafe_allow_html=True)
     styles.header_divider()
 
 

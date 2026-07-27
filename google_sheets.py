@@ -13,14 +13,13 @@ import os
 from datetime import datetime, timezone
 
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 import config
 
 logger = logging.getLogger(__name__)
 
 _SCOPES = [
-    "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
@@ -82,9 +81,7 @@ def _get_client() -> gspread.Client:
     if config.GOOGLE_CREDENTIALS_JSON:
         try:
             info = json.loads(config.GOOGLE_CREDENTIALS_JSON)
-            credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-                info, _SCOPES
-            )
+            credentials = Credentials.from_service_account_info(info, scopes=_SCOPES)
             return gspread.authorize(credentials)
         except Exception as exc:  # noqa: BLE001
             raise GoogleSheetsUnavailableError(
@@ -97,9 +94,7 @@ def _get_client() -> gspread.Client:
             f"Service account credentials not found at '{creds_file}'."
         )
     try:
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(
-            creds_file, _SCOPES
-        )
+        credentials = Credentials.from_service_account_file(creds_file, scopes=_SCOPES)
         return gspread.authorize(credentials)
     except Exception as exc:  # noqa: BLE001
         raise GoogleSheetsUnavailableError(str(exc)) from exc

@@ -326,8 +326,12 @@ def _brand_mark() -> str:
     logo_path = config.ASSETS_DIR / "logo-mark-v2.png"
     if logo_path.exists():
         uri = "data:image/png;base64," + base64.b64encode(logo_path.read_bytes()).decode()
+        # Paint with --accent-ink (dark on the gold badge in dark mode, light
+        # on the bronze badge in light mode). currentColor can't be used here:
+        # the global `span { color: var(--text) }` rule would win.
         return (
-            f'<span class="logo-mark" style="display:block;background-color:currentColor;'
+            f'<span class="logo-mark" style="display:block;'
+            f'background-color:var(--accent-ink);'
             f'-webkit-mask:url({uri}) center/contain no-repeat;'
             f'mask:url({uri}) center/contain no-repeat"></span>'
         )

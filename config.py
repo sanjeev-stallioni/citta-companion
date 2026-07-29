@@ -49,7 +49,14 @@ DISCLAIMER_TEXT = (
 # Gemini configuration
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = _get_env("GEMINI_API_KEY")
-GEMINI_MODEL_NAME = _get_env("GEMINI_MODEL_NAME", "gemini-flash-latest")
+# Pinned, not "-latest": a floating alias silently moves to newer and pricier
+# models. The client asked for Gemini 1.5 Flash, but Google has retired the
+# whole 1.x/2.x line for projects that hadn't already used it — every variant
+# returns "no longer available", and paying doesn't change that. The 3.x Flash
+# Lite tier is the cheapest still callable and honours the client's intent.
+# Google AI Studio's "Rate limits by model" page lists retired models too, so
+# treat an actual API call as the only proof a model is usable.
+GEMINI_MODEL_NAME = _get_env("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite")
 
 # ---------------------------------------------------------------------------
 # Google Sheets configuration

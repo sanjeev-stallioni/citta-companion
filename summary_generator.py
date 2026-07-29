@@ -25,6 +25,7 @@ SUMMARY_FIELDS = [
     "workplace_pressure",
     "manager_relationship",
     "coping_strategy",
+    "emotional_regulation",
     "human_support_requested",
     "risk_category",
     "summary",

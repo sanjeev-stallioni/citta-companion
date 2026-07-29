@@ -149,7 +149,7 @@ Signatures are accepted in either base64url or hex, because automation tools
 
    ```env
    GEMINI_API_KEY=your-gemini-api-key-here
-   GEMINI_MODEL_NAME=gemini-flash-latest
+   GEMINI_MODEL_NAME=gemini-3.1-flash-lite
    ```
 
 The key is read only from the environment — it is **never hardcoded**.
@@ -218,7 +218,7 @@ ADMIN_ALERT_EMAIL=who-gets-risk-alerts@example.com
 
    ```toml
    GEMINI_API_KEY = "..."
-   GEMINI_MODEL_NAME = "gemini-flash-latest"
+   GEMINI_MODEL_NAME = "gemini-3.1-flash-lite"
 
    GOOGLE_SHEET_KEY = "..."
    WORKSHEET_SUMMARIES = "Chat Summaries"

@@ -25,40 +25,52 @@ _SCOPES = [
 ]
 
 # Column headers for each worksheet.
+# These MUST stay in the same order as the columns in the live spreadsheet —
+# rows are appended positionally, so a reordered column silently corrupts data.
+# Blank entries are columns the chatbot cannot know (personal details live in
+# the Employee Registry, joinable on Employee ID) or that Citta's team fills in
+# during review.
 _HEADERS = {
     config.WORKSHEET_SUMMARIES: [
-        "timestamp",
-        "employee_id",
-        "sector",
-        "language",
-        "overall_wellbeing",
-        "stress_level",
-        "sleep",
-        "burnout",
-        "workplace_pressure",
-        "manager_relationship",
-        "coping_strategy",
-        "human_support_requested",
-        "risk_category",
-        "summary",
-        "recommendation",
+        "Employee ID",
+        "Session Date",
+        "Overall Wellbeing",
+        "Stress Level",
+        "Burnout",
+        "Sleep Issues",
+        "Workplace Pressure",
+        "Manager/Team Stress",
+        "Coping Strategies",
+        "Emotional Regulation",
+        "Human Support Requested",
+        "AI Summary",
+        "Risk Category",
     ],
     config.WORKSHEET_RISK_FLAGS: [
-        "timestamp",
-        "employee_id",
-        "sector",
-        "language",
-        "risk_category",
-        "matched_keywords",
-        "trigger_message",
+        "Employee ID",
+        "Date",
+        "Risk Category",
+        "Detection Method",
+        "Matched Keyword",
+        "Human Support Requested",
+        "Admin Email Sent",
+        "Reviewed By",
+        "Review Date",
+        "Review Status",
     ],
     config.WORKSHEET_SUPPORT_LEADS: [
-        "timestamp",
-        "employee_id",
-        "sector",
-        "language",
-        "human_support_requested",
-        "notes",
+        "Employee ID",
+        "First Name",
+        "Personal Email",
+        "Phone",
+        "Risk Category",
+        "Human Support Requested",
+        "Contact Opt-in",
+        "Assigned To",
+        "Contact Date",
+        "Contact Outcome",
+        "Follow-up Status",
+        "Notes",
     ],
 }
 
@@ -149,23 +161,26 @@ def _append(worksheet_name: str, row: list) -> bool:
 # Public API
 # ---------------------------------------------------------------------------
 def save_chat_summary(employee_id: str, sector: str, language: str, summary: dict) -> bool:
-    """Persist a structured conversation summary. Returns success flag."""
+    """Persist a structured conversation summary. Returns success flag.
+
+    ``sector`` and ``language`` are not written here — they already sit in the
+    Employee Registry against the same Employee ID, so repeating them would
+    duplicate data the executive report joins on anyway.
+    """
     row = [
-        _now(),
         employee_id,
-        sector,
-        language,
+        _now(),
         summary.get("overall_wellbeing", ""),
         summary.get("stress_level", ""),
-        summary.get("sleep", ""),
         summary.get("burnout", ""),
+        summary.get("sleep", ""),
         summary.get("workplace_pressure", ""),
         summary.get("manager_relationship", ""),
         summary.get("coping_strategy", ""),
+        summary.get("emotional_regulation", ""),
         summary.get("human_support_requested", ""),
-        summary.get("risk_category", ""),
         summary.get("summary", ""),
-        summary.get("recommendation", ""),
+        summary.get("risk_category", ""),
     ]
     return _append(config.WORKSHEET_SUMMARIES, row)
 
@@ -177,16 +192,27 @@ def save_risk_flag(
     risk_category: str,
     matched_keywords: list[str],
     trigger_message: str,
+    detection_method: str = "keyword",
+    admin_email_sent: bool = False,
 ) -> bool:
-    """Persist a risk/crisis flag. Returns success flag."""
+    """Persist a risk/crisis flag. Returns success flag.
+
+    ``trigger_message`` is deliberately not written to the sheet — the raw words
+    someone typed in distress are sent to the admin alert email instead, so the
+    shared spreadsheet keeps only the fact of the flag. The three review columns
+    are left blank for Citta's intake team.
+    """
     row = [
-        _now(),
         employee_id,
-        sector,
-        language,
+        _now(),
         risk_category,
+        detection_method,
         ", ".join(matched_keywords),
-        trigger_message,
+        "",  # Human Support Requested — set by the summary flow, not here
+        "yes" if admin_email_sent else "no",
+        "",  # Reviewed By
+        "",  # Review Date
+        "",  # Review Status
     ]
     return _append(config.WORKSHEET_RISK_FLAGS, row)
 
@@ -197,14 +223,27 @@ def save_support_lead(
     language: str,
     human_support_requested: str,
     notes: str = "",
+    risk_category: str = "",
 ) -> bool:
-    """Persist a request for human support. Returns success flag."""
+    """Persist a request for human support. Returns success flag.
+
+    Name, email and phone are left blank on purpose: the chat app never receives
+    them (the link carries only ID, sector and language). Citta's team fills
+    them by looking the Employee ID up in the registry, which keeps personal
+    contact details out of the chat side of the system entirely.
+    """
     row = [
-        _now(),
         employee_id,
-        sector,
-        language,
+        "",  # First Name      \
+        "",  # Personal Email   > from the Employee Registry
+        "",  # Phone           /
+        risk_category,
         human_support_requested,
+        "",  # Contact Opt-in — from the Employee Registry
+        "",  # Assigned To      \
+        "",  # Contact Date      > filled by Citta's intake team
+        "",  # Contact Outcome  /
+        "",  # Follow-up Status
         notes,
     ]
     return _append(config.WORKSHEET_SUPPORT_LEADS, row)

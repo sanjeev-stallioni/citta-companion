@@ -58,6 +58,7 @@ these keys:
   "workplace_pressure": "<short description of workload/pressure>",
   "manager_relationship": "<short description>",
   "coping_strategy": "<how the person copes, if mentioned>",
+  "emotional_regulation": "<how the person manages difficult emotions, if mentioned>",
   "human_support_requested": "<yes / no / unclear>",
   "risk_category": "<green / yellow / amber / red / crisis>",
   "summary": "<2-3 sentence neutral narrative summary>",

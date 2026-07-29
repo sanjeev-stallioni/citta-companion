@@ -66,9 +66,9 @@ GOOGLE_SHEET_KEY = _get_env("GOOGLE_SHEET_KEY")
 GOOGLE_SHEET_NAME = _get_env("GOOGLE_SHEET_NAME", "Citta Companion")
 
 # Worksheet (tab) names inside the spreadsheet.
-WORKSHEET_SUMMARIES = _get_env("WORKSHEET_SUMMARIES", "Summaries")
-WORKSHEET_RISK_FLAGS = _get_env("WORKSHEET_RISK_FLAGS", "RiskFlags")
-WORKSHEET_SUPPORT_LEADS = _get_env("WORKSHEET_SUPPORT_LEADS", "SupportLeads")
+WORKSHEET_SUMMARIES = _get_env("WORKSHEET_SUMMARIES", "Chat Summaries")
+WORKSHEET_RISK_FLAGS = _get_env("WORKSHEET_RISK_FLAGS", "Risk Flags")
+WORKSHEET_SUPPORT_LEADS = _get_env("WORKSHEET_SUPPORT_LEADS", "Support Leads")
 
 # ---------------------------------------------------------------------------
 # Email configuration (placeholders — no real credentials committed)

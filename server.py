@@ -125,13 +125,15 @@ def api_chat():
         session["risk_category"] = RISK_CRISIS
         session["crisis"] = True
         keywords = matched_keywords(message)
+        # Alert first so the sheet can record whether the admin was reached.
+        alerted = send_admin_alert(
+            session["employee_id"], session["sector"], RISK_CRISIS,
+            keywords, message,
+        )
         save_risk_flag(
             session["employee_id"], session["sector"], session["lang"],
             RISK_CRISIS, keywords, message,
-        )
-        send_admin_alert(
-            session["employee_id"], session["sector"], RISK_CRISIS,
-            keywords, message,
+            detection_method="keyword", admin_email_sent=alerted,
         )
         session["messages"].append({"role": "assistant", "content": CRISIS_MESSAGE})
         return jsonify({"reply": CRISIS_MESSAGE, "crisis": True})
@@ -168,6 +170,7 @@ def api_finish():
         save_support_lead(
             session["employee_id"], session["sector"], session["lang"],
             "yes", summary.get("summary", ""),
+            risk_category=summary.get("risk_category", ""),
         )
     return jsonify({"summary": summary, "saved": saved})
 

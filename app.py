@@ -156,7 +156,10 @@ def handle_finish_conversation() -> None:
             "conversation is still complete."
         )
     if str(summary.get("human_support_requested", "")).lower() == "yes":
-        save_support_lead(emp, sector, lang, "yes", summary.get("summary", ""))
+        save_support_lead(
+            emp, sector, lang, "yes", summary.get("summary", ""),
+            risk_category=summary.get("risk_category", ""),
+        )
 
 
 def trigger_crisis(trigger_message: str) -> None:
@@ -169,8 +172,12 @@ def trigger_crisis(trigger_message: str) -> None:
     sector = st.session_state.sector
     lang = st.session_state.lang
 
-    save_risk_flag(emp, sector, lang, RISK_CRISIS, keywords, trigger_message)
-    send_admin_alert(emp, sector, RISK_CRISIS, keywords, trigger_message)
+    # Alert first so the sheet can record whether the admin was actually reached.
+    alerted = send_admin_alert(emp, sector, RISK_CRISIS, keywords, trigger_message)
+    save_risk_flag(
+        emp, sector, lang, RISK_CRISIS, keywords, trigger_message,
+        detection_method="keyword", admin_email_sent=alerted,
+    )
 
 
 def render_summary() -> None:

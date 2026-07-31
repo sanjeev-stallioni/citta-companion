@@ -30,6 +30,7 @@ from prompts import (
     CRISIS_MESSAGE,
     FALLBACK_ERROR_MESSAGE,
     get_system_prompt,
+    get_ui_copy,
     get_welcome_copy,
     get_welcome_message,
 )
@@ -46,9 +47,6 @@ from utils import (
 )
 
 logging.basicConfig(level=logging.INFO)
-
-# Quick-reply chips (from the reference design).
-SUGGESTIONS = ["Workload", "Sleep", "Team pressure", "Something personal"]
 
 # ---------------------------------------------------------------------------
 # Page configuration
@@ -277,22 +275,29 @@ def render_chat() -> None:
         render_summary()
         return
 
-    # Quick-reply chips (functional — clicking sends that prompt).
-    with st.container(key="chips"):
-        chip_cols = st.columns(len(SUGGESTIONS), gap="small")
-        for col, text in zip(chip_cols, SUGGESTIONS):
-            if col.button(text, key=f"sug_{text}"):
-                handle_turn(text)
+    ui = get_ui_copy(st.session_state.lang)
+
+    # Quick-reply chips (functional — clicking sends that prompt). They are an
+    # opener for someone who doesn't know how to start, so they appear under the
+    # welcome only. Once the conversation is running they'd just compete with
+    # whatever the employee was about to say.
+    if len(st.session_state.messages) <= 1:
+        with st.container(key="chips"):
+            chip_cols = st.columns(len(ui["chips"]), gap="small")
+            for i, (col, text) in enumerate(zip(chip_cols, ui["chips"])):
+                # Keyed by position, not label — the labels are translated.
+                if col.button(text, key=f"sug_{i}"):
+                    handle_turn(text)
 
     # Composer.
-    user_message = st.chat_input("Share how you're feeling…")
+    user_message = st.chat_input(ui["placeholder"])
     if user_message:
         handle_turn(user_message)
 
-    # Finish action — rendered as a chip alongside the quick replies.
+    # Finish action, once there's something to summarise.
     if len(st.session_state.messages) > 2:
         with st.container(key="finish"):
-            if st.button("Finish conversation", key="finish_btn"):
+            if st.button(ui["finish"], key="finish_btn"):
                 handle_finish_conversation()
                 st.rerun()
 

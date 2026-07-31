@@ -256,10 +256,18 @@ button:focus-visible { outline: 3px solid var(--ring) !important; outline-offset
 [class*="st-key-chips"] [data-testid="stColumn"] {
     width: auto !important; flex: 0 0 auto !important; min-width: 0 !important; }
 [class*="st-key-chips"] button { white-space: nowrap !important; }
-/* "Finish conversation" sits with the chips, indented under the bot card. */
-[class*="st-key-finish"] { max-width: 760px; margin: 8px auto 0; }
+/* "Finish conversation" is indented like the chips but must not read as one of
+   them — it ends the session. Filled in the soft accent with a heavier label,
+   so it is clearly an action without shouting like the send button. */
+[class*="st-key-finish"] { max-width: 760px; margin: 14px auto 0; }
 [class*="st-key-finish"] [data-testid="stElementContainer"] { margin-left: 46px; }
-[class*="st-key-finish"] button { white-space: nowrap !important; }
+[class*="st-key-finish"] button { white-space: nowrap !important;
+    background-color: var(--accent-soft) !important; border-color: transparent !important;
+    color: var(--accent) !important; font-weight: 600 !important;
+    padding: .5rem 1.1rem !important; }
+[class*="st-key-finish"] button:hover {
+    background-color: var(--accent) !important; color: var(--accent-ink) !important; }
+[class*="st-key-finish"] button:hover * { color: var(--accent-ink) !important; }
 
 /* ---------- Streamlit alerts follow the palette ---------- */
 [data-testid="stAlert"] { background-color: var(--surface) !important; border: 1px solid var(--line) !important;

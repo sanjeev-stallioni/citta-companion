@@ -176,6 +176,48 @@ WELCOME_COPY = {
     },
 }
 
+# Interface copy the employee reads or clicks. The quick-reply chips are sent
+# verbatim as the employee's first message, so they have to be in the language
+# the conversation is being held in — an English "Workload" would open a Tamil
+# conversation in English.
+UI_COPY = {
+    "en": {
+        "chips": ["Workload", "Sleep", "Team pressure", "Something personal"],
+        "finish": "Finish conversation",
+        "placeholder": "Share how you're feeling…",
+    },
+    "hi": {
+        "chips": ["काम का बोझ", "नींद", "टीम का दबाव", "कुछ निजी"],
+        "finish": "बातचीत समाप्त करें",
+        "placeholder": "आप कैसा महसूस कर रहे हैं, बताइए…",
+    },
+    "kn": {
+        "chips": ["ಕೆಲಸದ ಹೊರೆ", "ನಿದ್ರೆ", "ತಂಡದ ಒತ್ತಡ", "ವೈಯಕ್ತಿಕ ವಿಷಯ"],
+        "finish": "ಸಂಭಾಷಣೆ ಮುಗಿಸಿ",
+        "placeholder": "ನಿಮಗೆ ಹೇಗೆ ಅನಿಸುತ್ತಿದೆ ಎಂದು ಹಂಚಿಕೊಳ್ಳಿ…",
+    },
+    "ta": {
+        "chips": ["வேலைப்பளு", "தூக்கம்", "குழு அழுத்தம்", "தனிப்பட்ட விஷயம்"],
+        "finish": "உரையாடலை முடிக்கவும்",
+        "placeholder": "நீங்கள் எப்படி உணர்கிறீர்கள் என்பதைப் பகிருங்கள்…",
+    },
+    "te": {
+        "chips": ["పని భారం", "నిద్ర", "బృంద ఒత్తిడి", "వ్యక్తిగత విషయం"],
+        "finish": "సంభాషణ ముగించండి",
+        "placeholder": "మీకు ఎలా అనిపిస్తోందో పంచుకోండి…",
+    },
+    "mr": {
+        "chips": ["कामाचा भार", "झोप", "संघातील दबाव", "वैयक्तिक काही"],
+        "finish": "संभाषण संपवा",
+        "placeholder": "तुम्हाला कसे वाटत आहे ते सांगा…",
+    },
+    "bn": {
+        "chips": ["কাজের চাপ", "ঘুম", "দলের চাপ", "ব্যক্তিগত কিছু"],
+        "finish": "কথোপকথন শেষ করুন",
+        "placeholder": "আপনার কেমন লাগছে তা জানান…",
+    },
+}
+
 CRISIS_MESSAGE = (
     "**If you are at immediate risk of harm or feel unsafe, please contact local "
     "emergency services or attend the nearest hospital.**\n\n"
@@ -207,6 +249,11 @@ def get_welcome_copy(lang: str) -> dict:
         WELCOME_COPY["en"]["note"]
     )
     return copy
+
+
+def get_ui_copy(lang: str) -> dict:
+    """Return the chip labels, finish label and composer hint for ``lang``."""
+    return UI_COPY.get(lang) or UI_COPY["en"]
 
 
 def get_welcome_message(lang: str) -> str:

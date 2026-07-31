@@ -32,6 +32,7 @@ from prompts import (
     CRISIS_MESSAGE,
     FALLBACK_ERROR_MESSAGE,
     get_system_prompt,
+    get_ui_copy,
     get_welcome_copy,
     get_welcome_message,
 )
@@ -44,9 +45,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-
-# Quick-reply chips (verbatim from the reference design).
-SUGGESTIONS = ["Workload", "Sleep", "Team pressure", "Something personal"]
 
 # In-memory session store: {session_id: {...}}. Suitable for the local,
 # single-process deployment this app targets.
@@ -103,8 +101,8 @@ def index():
         employee_id=session["employee_id"],
         sector=session["sector"],
         language=language_label(session["lang"]),
-        chips=SUGGESTIONS,
         welcome=get_welcome_copy(lang),
+        ui=get_ui_copy(lang),
     )
 
 

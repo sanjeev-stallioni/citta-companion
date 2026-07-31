@@ -220,7 +220,7 @@ input,textarea,button{font:inherit;color:inherit}
     <div id="composerWrap" style="padding:14px 26px 22px;background-color:var(--bg)">
       <div style="max-width:760px;margin:0 auto">
         <div style="display:flex;align-items:flex-end;gap:12px;background-color:var(--surface);border:1px solid var(--line-2);border-radius:18px;padding:8px 8px 8px 18px;box-shadow:var(--shadow)">
-          <input id="draft" placeholder="Share how you're feeling…" autocomplete="off" style="flex:1;min-width:0;background:transparent;border:0;outline:none;padding:12px 0;font-size:14.5px">
+          <input id="draft" placeholder="{{ ui.placeholder }}" autocomplete="off" style="flex:1;min-width:0;background:transparent;border:0;outline:none;padding:12px 0;font-size:14.5px">
           <button id="sendBtn" class="send-btn" title="Send" style="width:38px;height:38px;flex:none;border:0;border-radius:12px;background-color:var(--accent);color:var(--accent-ink);display:grid;place-items:center;cursor:pointer">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
           </button>
@@ -239,8 +239,8 @@ input,textarea,button{font:inherit;color:inherit}
   "use strict";
 
   var SESSION_ID = "{{ session_id }}";
-  var CHIPS = {{ chips | tojson }};
-  var FINISH_LABEL = "Finish conversation";
+  var CHIPS = {{ ui.chips | tojson }};
+  var FINISH_LABEL = {{ ui.finish | tojson }};
 
   var $ = function (id) { return document.getElementById(id); };
   var thread = $("thread"), scroller = $("scroll"), draft = $("draft"),
@@ -380,6 +380,19 @@ input,textarea,button{font:inherit;color:inherit}
     b.addEventListener("click", handler);
     return b;
   }
+  /* Ends the session, so it must not look like another suggestion: filled in
+     the soft accent with a heavier label. */
+  function finishButton(label, handler) {
+    var b = el('<button style="padding:8px 16px;border-radius:99px;background:var(--accent-soft);border:1px solid transparent;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer">' + esc(label) + '</button>');
+    b.addEventListener("mouseenter", function () {
+      b.style.background = "var(--accent)"; b.style.color = "var(--accent-ink)";
+    });
+    b.addEventListener("mouseleave", function () {
+      b.style.background = "var(--accent-soft)"; b.style.color = "var(--accent)";
+    });
+    b.addEventListener("click", handler);
+    return b;
+  }
   function renderChips(target) {
     target.innerHTML = "";
     if (state.locked) return;
@@ -389,7 +402,7 @@ input,textarea,button{font:inherit;color:inherit}
       });
     }
     if (state.userTurns >= 2) {
-      target.appendChild(chipButton(FINISH_LABEL, finishConversation));
+      target.appendChild(finishButton(FINISH_LABEL, finishConversation));
     }
   }
   var activeChips = chipsRow;

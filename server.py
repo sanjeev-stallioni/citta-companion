@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 
 from flask import Flask, jsonify, render_template, request
 
@@ -30,6 +31,7 @@ from google_sheets import save_chat_summary, save_risk_flag, save_support_lead
 from prompts import CRISIS_MESSAGE, FALLBACK_ERROR_MESSAGE, get_system_prompt
 from risk_detection import RISK_CRISIS, detect_risk, matched_keywords
 from summary_generator import generate_summary
+from transcript_service import save_transcript
 from utils import language_label
 
 logging.basicConfig(level=logging.INFO)
@@ -163,8 +165,13 @@ def api_finish():
     summary = generate_summary(model, session["messages"], session["risk_category"])
     session["finished"] = True
 
+    transcript_url = save_transcript(
+        session["employee_id"], datetime.now().strftime("%Y-%m-%d"),
+        session["messages"],
+    )
     saved = save_chat_summary(
-        session["employee_id"], session["sector"], session["lang"], summary
+        session["employee_id"], session["sector"], session["lang"], summary,
+        transcript_url,
     )
     if str(summary.get("human_support_requested", "")).lower() == "yes":
         save_support_lead(

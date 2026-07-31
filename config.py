@@ -104,6 +104,17 @@ LINK_TTL_DAYS = int(_get_env("LINK_TTL_DAYS", "0") or "0")
 # Public base URL, used when generating links.
 APP_BASE_URL = _get_env("APP_BASE_URL", "http://localhost:8501")
 
+# ---------------------------------------------------------------------------
+# Transcript archiving
+# ---------------------------------------------------------------------------
+# Full conversations are archived as PDFs in Citta's Drive. The service account
+# cannot create Drive files ("Service Accounts do not have storage quota"), so
+# an Apps Script Web App running as the Citta account does it instead — see
+# transcript-endpoint.gs. Leave either value empty to disable archiving; the
+# rest of the app carries on unaffected.
+TRANSCRIPT_WEBHOOK_URL = _get_env("TRANSCRIPT_WEBHOOK_URL")
+TRANSCRIPT_SECRET = _get_env("TRANSCRIPT_SECRET")
+
 DEFAULT_EMPLOYEE_ID = "UNKNOWN"
 DEFAULT_SECTOR = "General"
 DEFAULT_LANG = "en"

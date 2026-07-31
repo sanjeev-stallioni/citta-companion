@@ -45,6 +45,7 @@ _HEADERS = {
         "Human Support Requested",
         "AI Summary",
         "Risk Category",
+        "Transcript Link",
     ],
     config.WORKSHEET_RISK_FLAGS: [
         "Employee ID",
@@ -160,12 +161,21 @@ def _append(worksheet_name: str, row: list) -> bool:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def save_chat_summary(employee_id: str, sector: str, language: str, summary: dict) -> bool:
+def save_chat_summary(
+    employee_id: str,
+    sector: str,
+    language: str,
+    summary: dict,
+    transcript_url: str = "",
+) -> bool:
     """Persist a structured conversation summary. Returns success flag.
 
     ``sector`` and ``language`` are not written here — they already sit in the
     Employee Registry against the same Employee ID, so repeating them would
     duplicate data the executive report joins on anyway.
+
+    ``transcript_url`` points at the archived PDF and is blank when archiving is
+    switched off or Drive was unreachable.
     """
     row = [
         employee_id,
@@ -181,6 +191,7 @@ def save_chat_summary(employee_id: str, sector: str, language: str, summary: dic
         summary.get("human_support_requested", ""),
         summary.get("summary", ""),
         summary.get("risk_category", ""),
+        transcript_url,
     ]
     return _append(config.WORKSHEET_SUMMARIES, row)
 

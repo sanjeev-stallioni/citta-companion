@@ -25,6 +25,7 @@ from gemini_service import (
     initialize_model,
 )
 from google_sheets import save_chat_summary, save_risk_flag, save_support_lead
+from transcript_service import save_transcript
 from prompts import (
     CRISIS_MESSAGE,
     FALLBACK_ERROR_MESSAGE,
@@ -150,7 +151,14 @@ def handle_finish_conversation() -> None:
     sector = st.session_state.sector
     lang = st.session_state.lang
 
-    if not save_chat_summary(emp, sector, lang, summary):
+    # Archive the conversation before the summary row, so the row can carry the
+    # link. A Drive failure returns "" rather than raising — losing the archive
+    # must not also lose the summary.
+    transcript_url = save_transcript(
+        emp, datetime.now().strftime("%Y-%m-%d"), st.session_state.messages
+    )
+
+    if not save_chat_summary(emp, sector, lang, summary, transcript_url):
         st.warning(
             "We couldn't save your summary to our records right now, but your "
             "conversation is still complete."

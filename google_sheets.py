@@ -61,9 +61,6 @@ _HEADERS = {
     ],
     config.WORKSHEET_SUPPORT_LEADS: [
         "Employee ID",
-        "First Name",
-        "Personal Email",
-        "Phone",
         "Risk Category",
         "Human Support Requested",
         "Contact Opt-in",
@@ -252,16 +249,14 @@ def save_support_lead(
 ) -> bool:
     """Persist a request for human support. Returns success flag.
 
-    Name, email and phone are left blank on purpose: the chat app never receives
-    them (the link carries only ID, sector and language). Citta's team fills
-    them by looking the Employee ID up in the registry, which keeps personal
-    contact details out of the chat side of the system entirely.
+    Name, email and phone are deliberately absent: the chat app never receives
+    them (the link carries only ID, sector and language), and Citta's team joins
+    on Employee ID against the Employee Registry. Keeping no column for them at
+    all means nobody can paste personal contact details into the one sheet the
+    design keeps free of them.
     """
     row = [
         employee_id,
-        "",  # First Name      \
-        "",  # Personal Email   > from the Employee Registry
-        "",  # Phone           /
         _titled(risk_category),
         _titled(human_support_requested),
         "",  # Contact Opt-in — from the Employee Registry

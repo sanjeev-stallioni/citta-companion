@@ -28,7 +28,13 @@ from gemini_service import (
     initialize_model,
 )
 from google_sheets import save_chat_summary, save_risk_flag, save_support_lead
-from prompts import CRISIS_MESSAGE, FALLBACK_ERROR_MESSAGE, get_system_prompt
+from prompts import (
+    CRISIS_MESSAGE,
+    FALLBACK_ERROR_MESSAGE,
+    get_system_prompt,
+    get_welcome_copy,
+    get_welcome_message,
+)
 from risk_detection import RISK_CRISIS, detect_risk, matched_keywords
 from summary_generator import generate_summary
 from transcript_service import save_transcript
@@ -41,17 +47,6 @@ app = Flask(__name__)
 
 # Quick-reply chips (verbatim from the reference design).
 SUGGESTIONS = ["Workload", "Sleep", "Team pressure", "Something personal"]
-
-# The welcome copy shown by the frontend, kept in the model's history so the
-# conversation context matches what the employee actually saw.
-# Official opening message from the project scope document.
-WELCOME_TEXT = (
-    "Hello, I'm Citta Companion. I'm here to support your wellbeing and help "
-    "understand what kind of support may be useful. This is not a diagnosis, "
-    "therapy, or emergency service. Your employer will not receive your "
-    "individual responses. They may only receive de-identified wellbeing "
-    "themes. How are you feeling today?"
-)
 
 # In-memory session store: {session_id: {...}}. Suitable for the local,
 # single-process deployment this app targets.
@@ -89,11 +84,13 @@ def index():
         lang = _first_param("lang", config.DEFAULT_LANG)
 
     session_id = uuid.uuid4().hex
+    # The welcome copy is kept in the model's history so the conversation
+    # context matches what the employee actually saw, in their language.
     session = {
         "employee_id": employee_id,
         "sector": sector,
         "lang": lang,
-        "messages": [{"role": "assistant", "content": WELCOME_TEXT}],
+        "messages": [{"role": "assistant", "content": get_welcome_message(lang)}],
         "model": None,
         "risk_category": "none",
         "crisis": False,
@@ -107,6 +104,7 @@ def index():
         sector=session["sector"],
         language=language_label(session["lang"]),
         chips=SUGGESTIONS,
+        welcome=get_welcome_copy(lang),
     )
 
 

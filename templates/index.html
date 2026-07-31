@@ -200,13 +200,15 @@ input,textarea,button{font:inherit;color:inherit}
               <span class="msg-time" style="color:var(--text-3);font-size:11.5px"></span>
             </div>
             <div class="card" style="background-color:var(--surface);border:1px solid var(--line);border-radius:4px 16px 16px 16px;padding:18px 20px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:11px;line-height:1.65;font-size:14.5px">
-              <div style="font-family:Newsreader,serif;font-size:20px;line-height:1.35">Hello, I'm Citta Companion.</div>
-              <div style="color:var(--text-2)">I'm here to support your wellbeing and help understand what kind of support may be useful.</div>
+              <div style="font-family:Newsreader,serif;font-size:20px;line-height:1.35">{{ welcome.hero }}</div>
+              <div style="color:var(--text-2)">{{ welcome.lead }}</div>
               <div style="display:flex;gap:9px;align-items:flex-start;padding:11px 13px;border-radius:10px;background-color:var(--accent-soft);color:var(--text-2);font-size:13px;line-height:1.5">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" style="flex:none;margin-top:2px"><rect x="4.5" y="10" width="15" height="9.5" rx="2.2"></rect><path d="M8.2 10V7.6a3.8 3.8 0 0 1 7.6 0V10"></path></svg>
-                This is not a diagnosis, therapy, or emergency service. Your employer will not receive your individual responses — they may only receive de-identified wellbeing themes.
+                <div>{{ welcome.note }}{% if welcome.note_en %}
+                  <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line-2);color:var(--text-3);font-size:12.5px">{{ welcome.note_en }}</div>
+                {% endif %}</div>
               </div>
-              <div>How are you feeling today?</div>
+              <div>{{ welcome.question }}</div>
             </div>
             <div id="chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
           </div>

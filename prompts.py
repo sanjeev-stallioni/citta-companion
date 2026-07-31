@@ -72,15 +72,109 @@ is missing. Never include personally identifying free text beyond what is needed
 # ---------------------------------------------------------------------------
 # Static conversational copy
 # ---------------------------------------------------------------------------
-WELCOME_MESSAGE = (
-    "Hello, I'm Citta Companion.\n\n"
-    "I'm here to support your wellbeing and help understand what kind of support "
-    "may be useful.\n\n"
-    "This is not a diagnosis, therapy, or emergency service. Your employer will "
-    "not receive your individual responses — they may only receive de-identified "
-    "wellbeing themes.\n\n"
-    "How are you feeling today?"
-)
+# The opening message, per language. Everything the model says afterwards is
+# generated in the employee's language, so an English-only greeting made the
+# first screen the odd one out.
+#
+# ``note`` is the safety and privacy disclaimer. It is always shown in English
+# as well as the employee's language: the English wording is the one agreed with
+# Citta, and a translation — however careful — should not be the only version of
+# a statement about what the employer does and does not receive.
+#
+# "Citta Companion" stays in Latin script everywhere: it is the product name,
+# and it matches the sidebar and the invitation email.
+WELCOME_COPY = {
+    "en": {
+        "hero": "Hello, I'm Citta Companion.",
+        "lead": (
+            "I'm here to support your wellbeing and help understand what kind of "
+            "support may be useful."
+        ),
+        "note": (
+            "This is not a diagnosis, therapy, or emergency service. Your employer "
+            "will not receive your individual responses — they may only receive "
+            "de-identified wellbeing themes."
+        ),
+        "question": "How are you feeling today?",
+    },
+    "hi": {
+        "hero": "नमस्ते, मैं Citta Companion हूँ।",
+        "lead": (
+            "मैं आपकी भलाई में सहयोग करने और यह समझने में मदद करने के लिए यहाँ हूँ कि "
+            "किस तरह का सहयोग उपयोगी हो सकता है।"
+        ),
+        "note": (
+            "यह कोई निदान, थेरेपी या आपातकालीन सेवा नहीं है। आपके नियोक्ता को आपके "
+            "व्यक्तिगत उत्तर नहीं मिलेंगे — उन्हें केवल पहचान रहित कल्याण विषय ही मिल सकते हैं।"
+        ),
+        "question": "आज आप कैसा महसूस कर रहे हैं?",
+    },
+    "kn": {
+        "hero": "ನಮಸ್ಕಾರ, ನಾನು Citta Companion.",
+        "lead": (
+            "ನಿಮ್ಮ ಯೋಗಕ್ಷೇಮಕ್ಕೆ ಬೆಂಬಲ ನೀಡಲು ಮತ್ತು ಯಾವ ರೀತಿಯ ಬೆಂಬಲ ಉಪಯುಕ್ತವಾಗಬಹುದು "
+            "ಎಂಬುದನ್ನು ಅರ್ಥಮಾಡಿಕೊಳ್ಳಲು ನಾನು ಇಲ್ಲಿದ್ದೇನೆ."
+        ),
+        "note": (
+            "ಇದು ರೋಗನಿರ್ಣಯ, ಚಿಕಿತ್ಸೆ ಅಥವಾ ತುರ್ತು ಸೇವೆಯಲ್ಲ. ನಿಮ್ಮ ವೈಯಕ್ತಿಕ ಉತ್ತರಗಳನ್ನು ನಿಮ್ಮ "
+            "ಉದ್ಯೋಗದಾತರು ಪಡೆಯುವುದಿಲ್ಲ — ಅವರು ಗುರುತು ತೆಗೆದುಹಾಕಿದ ಯೋಗಕ್ಷೇಮ ವಿಷಯಗಳನ್ನು "
+            "ಮಾತ್ರ ಪಡೆಯಬಹುದು."
+        ),
+        "question": "ಇಂದು ನಿಮಗೆ ಹೇಗೆ ಅನಿಸುತ್ತಿದೆ?",
+    },
+    "ta": {
+        "hero": "வணக்கம், நான் Citta Companion.",
+        "lead": (
+            "உங்கள் நல்வாழ்வுக்கு உதவவும், எந்த வகையான ஆதரவு பயனுள்ளதாக இருக்கும் "
+            "என்பதைப் புரிந்துகொள்ளவும் நான் இங்கே இருக்கிறேன்."
+        ),
+        "note": (
+            "இது நோய் கண்டறிதல், சிகிச்சை அல்லது அவசர சேவை அல்ல. உங்கள் தனிப்பட்ட "
+            "பதில்களை உங்கள் நிறுவனம் பெறாது — அடையாளம் நீக்கப்பட்ட நல்வாழ்வுக் "
+            "கருப்பொருள்களை மட்டுமே அவர்கள் பெறலாம்."
+        ),
+        "question": "இன்று நீங்கள் எப்படி உணர்கிறீர்கள்?",
+    },
+    "te": {
+        "hero": "నమస్కారం, నేను Citta Companion.",
+        "lead": (
+            "మీ శ్రేయస్సుకు తోడ్పడటానికి, ఎలాంటి మద్దతు ఉపయోగకరంగా ఉంటుందో "
+            "అర్థం చేసుకోవడానికి నేను ఇక్కడ ఉన్నాను."
+        ),
+        "note": (
+            "ఇది రోగ నిర్ధారణ, చికిత్స లేదా అత్యవసర సేవ కాదు. మీ వ్యక్తిగత సమాధానాలను "
+            "మీ యజమాని అందుకోరు — వారు గుర్తింపు తొలగించిన శ్రేయస్సు అంశాలను మాత్రమే "
+            "అందుకోవచ్చు."
+        ),
+        "question": "ఈ రోజు మీకు ఎలా అనిపిస్తోంది?",
+    },
+    "mr": {
+        "hero": "नमस्कार, मी Citta Companion आहे.",
+        "lead": (
+            "तुमच्या स्वास्थ्याला आधार देण्यासाठी आणि कोणत्या प्रकारचा आधार उपयुक्त ठरेल "
+            "हे समजून घेण्यासाठी मी येथे आहे."
+        ),
+        "note": (
+            "ही निदान, थेरपी किंवा आपत्कालीन सेवा नाही. तुमची वैयक्तिक उत्तरे तुमच्या "
+            "नियोक्त्याला मिळणार नाहीत — त्यांना फक्त ओळख काढून टाकलेले स्वास्थ्यविषयक "
+            "मुद्दे मिळू शकतात."
+        ),
+        "question": "आज तुम्हाला कसे वाटत आहे?",
+    },
+    "bn": {
+        "hero": "নমস্কার, আমি Citta Companion।",
+        "lead": (
+            "আপনার সুস্থতায় সহায়তা করতে এবং কোন ধরনের সহায়তা কাজে লাগতে পারে তা "
+            "বুঝতে আমি এখানে আছি।"
+        ),
+        "note": (
+            "এটি কোনো রোগনির্ণয়, থেরাপি বা জরুরি পরিষেবা নয়। আপনার ব্যক্তিগত উত্তর "
+            "আপনার নিয়োগকর্তা পাবেন না — তাঁরা কেবল পরিচয়হীন সুস্থতা-বিষয়ক প্রবণতা "
+            "পেতে পারেন।"
+        ),
+        "question": "আজ আপনার কেমন লাগছে?",
+    },
+}
 
 CRISIS_MESSAGE = (
     "**If you are at immediate risk of harm or feel unsafe, please contact local "
@@ -99,3 +193,24 @@ def get_system_prompt(sector: str, lang: str) -> str:
     """Build the system prompt for the given sector and language."""
     language = SUPPORTED_LANGUAGES.get(lang, "English")
     return SYSTEM_PROMPT_TEMPLATE.format(sector=sector or "General", language=language)
+
+
+def get_welcome_copy(lang: str) -> dict:
+    """Return the welcome copy for ``lang``, falling back to English.
+
+    ``note_en`` carries the English disclaimer and is empty when the employee's
+    language *is* English, so a renderer can print it unconditionally without
+    showing the same sentence twice.
+    """
+    copy = dict(WELCOME_COPY.get(lang) or WELCOME_COPY["en"])
+    copy["note_en"] = "" if copy["note"] == WELCOME_COPY["en"]["note"] else (
+        WELCOME_COPY["en"]["note"]
+    )
+    return copy
+
+
+def get_welcome_message(lang: str) -> str:
+    """The welcome copy as plain text, for the model history and transcripts."""
+    copy = get_welcome_copy(lang)
+    parts = [copy["hero"], copy["lead"], copy["note"], copy["note_en"], copy["question"]]
+    return "\n\n".join(part for part in parts if part)

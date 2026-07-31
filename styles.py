@@ -185,6 +185,9 @@ a:hover { color: var(--text); }
 .cc-note { display: flex; gap: 9px; align-items: flex-start; padding: 11px 13px; border-radius: 10px;
     background-color: var(--accent-soft); color: var(--text-2); font-size: 13px; line-height: 1.5; }
 .cc-note svg { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+/* The English disclaimer sits under the translated one, quieter but legible. */
+.cc-note-en { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-2);
+    color: var(--text-3); font-size: 12.5px; }
 .cc-actions { display: flex; gap: 6px; margin-top: 9px; }
 .cc-actions .act { width: 29px; height: 29px; border-radius: 8px; background: transparent; border: 1px solid var(--line);
     color: var(--text-3); display: grid; place-items: center; }
@@ -284,6 +287,12 @@ button:focus-visible { outline: 3px solid var(--ring) !important; outline-offset
 .cc-lead { color: var(--text-2); line-height: 1.65; font-size: 14.5px; }
 
 /* ---------- Summary ---------- */
+/* The summary is emitted inside the bot shell, so its blocks fill that column
+   instead of re-centring themselves on the 760px conversation width. */
+.cc-bot-body .cc-grid, .cc-bot-body .cc-panel {
+    max-width: none; margin-left: 0 !important; margin-right: 0 !important; }
+.cc-sum-h { font-family: 'Newsreader', serif; font-size: 19px; font-weight: 500;
+    color: var(--text); margin: 18px 0 10px; }
 .cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0; }
 .cc-tile { background-color: var(--surface); border: 1px solid var(--line); border-radius: 13px; padding: 12px 14px; }
 .cc-tile .k { color: var(--accent); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
@@ -438,17 +447,25 @@ def render_bot_message(content: str, ts: str) -> None:
     st.markdown(_bot_shell(inner, ts), unsafe_allow_html=True)
 
 
-def render_welcome(ts: str) -> None:
-    """The designed hero greeting using the official scope opening message."""
+def render_welcome(ts: str, copy: dict) -> None:
+    """The designed hero greeting, in the employee's language.
+
+    ``copy`` comes from ``prompts.get_welcome_copy``. Its ``note_en`` is the
+    English disclaimer, shown beneath the translated one and blank when the
+    employee's language is already English.
+    """
+    note_en = (
+        f'<div class="cc-note-en">{html.escape(copy["note_en"])}</div>'
+        if copy.get("note_en")
+        else ""
+    )
     card = (
         '<div class="cc-card">'
-        '<div class="hero">Hello, I\'m Citta Companion.</div>'
-        "<p>I'm here to support your wellbeing and help understand what kind of "
-        "support may be useful.</p>"
-        f'<div class="cc-note">{IC["lock"]}This is not a diagnosis, therapy, or '
-        "emergency service. Your employer will not receive your individual responses "
-        "— they may only receive de-identified wellbeing themes.</div>"
-        "<p>How are you feeling today?</p></div>"
+        f'<div class="hero">{html.escape(copy["hero"])}</div>'
+        f'<p>{html.escape(copy["lead"])}</p>'
+        f'<div class="cc-note">{IC["lock"]}'
+        f'<div>{html.escape(copy["note"])}{note_en}</div></div>'
+        f'<p>{html.escape(copy["question"])}</p></div>'
     )
     st.markdown(_bot_shell(card, ts), unsafe_allow_html=True)
 
@@ -460,12 +477,35 @@ def render_crisis_message(content: str, ts: str) -> None:
 
 
 
-def render_summary_grid(pairs: list[tuple[str, str]]) -> None:
+def render_summary_block(
+    pairs: list[tuple[str, str]], summary: str, recommendation: str, ts: str = ""
+) -> None:
+    """Render the closing summary as a single bot message.
+
+    Built as one block on purpose. Streamlit's own ``st.success`` and headings
+    span the full page, so mixing them with the 760px conversation column left
+    the banner and the "Wellbeing Summary" heading hanging out to the left of
+    the tiles. Everything here sits inside the bot shell instead, which keeps
+    the summary aligned with the messages above it.
+    """
     tiles = "".join(
-        f'<div class="cc-tile"><div class="k">{k}</div><div class="v">{html.escape(str(v))}</div></div>'
+        f'<div class="cc-tile"><div class="k">{k}</div>'
+        f'<div class="v">{html.escape(str(v))}</div></div>'
         for k, v in pairs
     )
-    st.markdown(f'<div class="cc-grid">{tiles}</div>', unsafe_allow_html=True)
+    inner = (
+        '<div class="cc-card"><p>Thank you for sharing. Here\'s a gentle summary '
+        "of our conversation.</p></div>"
+        '<div class="cc-sum-h">Wellbeing Summary</div>'
+        f'<div class="cc-grid">{tiles}</div>'
+        '<div class="cc-panel" style="margin-top:12px">'
+        '<p class="cc-lead" style="margin:0 0 8px">'
+        f'<b style="color:var(--accent)">Summary.</b> {html.escape(summary)}</p>'
+        '<p class="cc-lead" style="margin:0">'
+        f'<b style="color:var(--accent)">Recommendation.</b> '
+        f"{html.escape(recommendation)}</p></div>"
+    )
+    st.markdown(_bot_shell(inner, ts), unsafe_allow_html=True)
 
 
 def render_invalid_link() -> None:
@@ -485,15 +525,5 @@ def render_invalid_link() -> None:
             isn't working, contact your wellbeing team for a new one.</p>
         </div>
         """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_summary_card(summary: str, recommendation: str) -> None:
-    st.markdown(
-        f'<div class="cc-panel" style="margin-top:12px"><p class="cc-lead" style="margin:0 0 8px">'
-        f'<b style="color:var(--accent)">Summary.</b> {html.escape(summary)}</p>'
-        f'<p class="cc-lead" style="margin:0"><b style="color:var(--accent)">Recommendation.</b> '
-        f'{html.escape(recommendation)}</p></div>',
         unsafe_allow_html=True,
     )

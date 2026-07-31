@@ -76,6 +76,20 @@ _HEADERS = {
 }
 
 
+def _titled(value: str) -> str:
+    """Match the spreadsheet's dropdown casing.
+
+    Risk categories and yes/no answers are lowercase everywhere in the code —
+    ``risk_detection`` compares against ``"crisis"``, the UI chips key off
+    ``"amber"`` — but the sheet's data validation lists are Title Case. Writing
+    the raw value makes every cell show "Input must be an item on the specified
+    list", so the conversion happens here, at the boundary, rather than by
+    changing the values the rest of the app reasons about.
+    """
+    text = str(value or "").strip()
+    return text[:1].upper() + text[1:] if text else ""
+
+
 class GoogleSheetsUnavailableError(RuntimeError):
     """Raised internally when Sheets cannot be reached."""
 
@@ -188,9 +202,9 @@ def save_chat_summary(
         summary.get("manager_relationship", ""),
         summary.get("coping_strategy", ""),
         summary.get("emotional_regulation", ""),
-        summary.get("human_support_requested", ""),
+        _titled(summary.get("human_support_requested", "")),
         summary.get("summary", ""),
-        summary.get("risk_category", ""),
+        _titled(summary.get("risk_category", "")),
         transcript_url,
     ]
     return _append(config.WORKSHEET_SUMMARIES, row)
@@ -216,11 +230,11 @@ def save_risk_flag(
     row = [
         employee_id,
         _now(),
-        risk_category,
+        _titled(risk_category),
         detection_method,
         ", ".join(matched_keywords),
         "",  # Human Support Requested — set by the summary flow, not here
-        "yes" if admin_email_sent else "no",
+        "Yes" if admin_email_sent else "No",
         "",  # Reviewed By
         "",  # Review Date
         "",  # Review Status
@@ -248,8 +262,8 @@ def save_support_lead(
         "",  # First Name      \
         "",  # Personal Email   > from the Employee Registry
         "",  # Phone           /
-        risk_category,
-        human_support_requested,
+        _titled(risk_category),
+        _titled(human_support_requested),
         "",  # Contact Opt-in — from the Employee Registry
         "",  # Assigned To      \
         "",  # Contact Date      > filled by Citta's intake team

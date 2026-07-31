@@ -29,8 +29,9 @@ from transcript_service import save_transcript
 from prompts import (
     CRISIS_MESSAGE,
     FALLBACK_ERROR_MESSAGE,
-    WELCOME_MESSAGE,
     get_system_prompt,
+    get_welcome_copy,
+    get_welcome_message,
 )
 from risk_detection import RISK_CRISIS, detect_risk, matched_keywords
 from summary_generator import generate_summary
@@ -191,9 +192,6 @@ def trigger_crisis(trigger_message: str) -> None:
 def render_summary() -> None:
     """Display the structured summary after the conversation ends."""
     summary = st.session_state.summary or {}
-    st.success("Thank you for sharing. Here's a gentle summary of our conversation.")
-    st.markdown("#### Wellbeing Summary")
-
     field_labels = {
         "overall_wellbeing": "Overall wellbeing",
         "stress_level": "Stress level",
@@ -205,11 +203,14 @@ def render_summary() -> None:
         "human_support_requested": "Human support",
         "risk_category": "Risk category",
     }
-    styles.render_summary_grid(
-        [(label, summary.get(key, "unclear")) for key, label in field_labels.items()]
-    )
-    styles.render_summary_card(
-        summary.get("summary", ""), summary.get("recommendation", "")
+    # Reuse the last message's timestamp rather than "now" — the summary is part
+    # of that closing exchange, and a fresh clock would tick on every rerun.
+    last = st.session_state.messages[-1] if st.session_state.messages else {}
+    styles.render_summary_block(
+        [(label, summary.get(key, "unclear")) for key, label in field_labels.items()],
+        summary.get("summary", ""),
+        summary.get("recommendation", ""),
+        last.get("ts", ""),
     )
 
 
@@ -248,8 +249,11 @@ def render_messages() -> None:
             styles.render_user_message(message["content"], ts)
         elif message["content"] == CRISIS_MESSAGE:
             styles.render_crisis_message(message["content"], ts)
-        elif i == 0 and message["content"] == WELCOME_MESSAGE:
-            styles.render_welcome(ts)
+        elif i == 0:
+            # The first message is always the welcome, whatever language it is
+            # in — matching on its text would break the moment a translation is
+            # edited.
+            styles.render_welcome(ts, get_welcome_copy(st.session_state.lang))
         else:
             styles.render_bot_message(message["content"], ts)
 
@@ -263,7 +267,7 @@ def render_chat() -> None:
         return
 
     if not st.session_state.messages:
-        _add_message("assistant", WELCOME_MESSAGE)
+        _add_message("assistant", get_welcome_message(st.session_state.lang))
 
     render_messages()
 

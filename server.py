@@ -39,7 +39,7 @@ from prompts import (
 from risk_detection import RISK_CRISIS, detect_risk, matched_keywords
 from summary_generator import generate_summary
 from transcript_service import save_transcript
-from utils import language_label
+from utils import language_label, risk_label
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -161,9 +161,13 @@ def api_finish():
     summary = generate_summary(model, session["messages"], session["risk_category"])
     session["finished"] = True
 
+    now = datetime.now()
     transcript_url = save_transcript(
-        session["employee_id"], datetime.now().strftime("%Y-%m-%d"),
-        session["messages"],
+        session["employee_id"], now.strftime("%Y-%m-%d"), session["messages"],
+        language=language_label(session["lang"]),
+        risk=risk_label(session["risk_category"]),
+        status="Crisis — paused" if session["crisis"] else "Finished",
+        display_date=now.strftime("%d %B %Y"),
     )
     saved = save_chat_summary(
         session["employee_id"], session["sector"], session["lang"], summary,

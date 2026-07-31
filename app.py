@@ -153,8 +153,15 @@ def handle_finish_conversation() -> None:
     # Archive the conversation before the summary row, so the row can carry the
     # link. A Drive failure returns "" rather than raising — losing the archive
     # must not also lose the summary.
+    now = datetime.now()
     transcript_url = save_transcript(
-        emp, datetime.now().strftime("%Y-%m-%d"), st.session_state.messages
+        emp,
+        now.strftime("%Y-%m-%d"),
+        st.session_state.messages,
+        language=language_label(lang),
+        risk=risk_label(st.session_state.risk_category),
+        status=conversation_status(),
+        display_date=now.strftime("%d %B %Y"),
     )
 
     if not save_chat_summary(emp, sector, lang, summary, transcript_url):

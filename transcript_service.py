@@ -18,6 +18,7 @@ import logging
 import requests
 
 import config
+from prompts import CRISIS_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,38 @@ def format_transcript(history: list[dict]) -> str:
     return "\n\n".join(lines)
 
 
-def save_transcript(employee_id: str, session_date: str, history: list[dict]) -> str:
+def _messages(history: list[dict]) -> list[dict]:
+    """Shape the history for the PDF renderer.
+
+    ``kind`` marks the crisis notice so the endpoint can set it apart visually —
+    when someone reviews a flagged conversation, the moment it escalated should
+    be findable at a glance rather than buried in identical grey cards.
+    """
+    return [
+        {
+            "role": message.get("role", ""),
+            "content": message.get("content", ""),
+            "ts": message.get("ts", ""),
+            "kind": "crisis" if message.get("content") == CRISIS_MESSAGE else "",
+        }
+        for message in history
+    ]
+
+
+def save_transcript(
+    employee_id: str,
+    session_date: str,
+    history: list[dict],
+    *,
+    language: str = "",
+    risk: str = "",
+    status: str = "",
+    display_date: str = "",
+) -> str:
     """Archive ``history`` as a PDF. Returns its URL, or "" on any failure.
+
+    ``language``, ``risk`` and ``status`` are shown in the PDF header; they are
+    optional so a caller that has none of them still gets a usable transcript.
 
     Never raises.
     """
@@ -55,6 +86,13 @@ def save_transcript(employee_id: str, session_date: str, history: list[dict]) ->
                 "secret": config.TRANSCRIPT_SECRET,
                 "employeeId": employee_id,
                 "sessionDate": session_date,
+                "displayDate": display_date or session_date,
+                "language": language,
+                "risk": risk,
+                "status": status,
+                "messages": _messages(history),
+                # Kept for an endpoint deployment that predates the designed
+                # layout: it ignores "messages" and renders this instead.
                 "transcript": transcript,
             },
             timeout=_TIMEOUT_SECONDS,

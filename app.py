@@ -146,6 +146,19 @@ def handle_finish_conversation() -> None:
     st.session_state.summary = summary
     st.session_state.conversation_finished = True
 
+    # Adopt the summary's assessed category as the session's risk.
+    #
+    # Until now this only ever moved on a keyword crisis, so a conversation the
+    # model rated Amber still displayed "Green" in the sidebar and printed
+    # "CURRENT RISK Green" at the top of the transcript — while the sheet said
+    # Amber. A reviewer opening that PDF would read the header and stop.
+    #
+    # A locally-detected crisis still wins: _normalize already refuses to lower
+    # it, so assigning here cannot downgrade an escalation.
+    assessed = str(summary.get("risk_category", "")).strip().lower()
+    if assessed:
+        st.session_state.risk_category = assessed
+
     emp = st.session_state.employee_id
     sector = st.session_state.sector
     lang = st.session_state.lang

@@ -161,6 +161,12 @@ def api_finish():
     summary = generate_summary(model, session["messages"], session["risk_category"])
     session["finished"] = True
 
+    # Adopt the summary's assessed category, so the transcript header and the
+    # sheet agree. A locally-detected crisis is preserved by _normalize.
+    assessed = str(summary.get("risk_category", "")).strip().lower()
+    if assessed:
+        session["risk_category"] = assessed
+
     now = datetime.now()
     transcript_url = save_transcript(
         session["employee_id"], now.strftime("%Y-%m-%d"), session["messages"],

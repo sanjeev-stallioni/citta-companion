@@ -59,11 +59,21 @@ def language_label(lang_code: str) -> str:
 
 
 # Label + chip style per risk category (scope: Green/Yellow/Amber/Red/Crisis).
+#
+# Two vocabularies meet here. ``risk_detection`` emits none/low/moderate/crisis
+# from the keyword scan; the summary model emits the scope's own
+# green/yellow/amber/red/crisis. Both end up in ``risk_category``, so both are
+# mapped — otherwise an Amber conversation shows a neutral grey chip because
+# "amber" was never a key.
 _RISK_META = {
     RISK_NONE: ("Green", "ok"),
     RISK_LOW: ("Yellow", "warn"),
     RISK_MODERATE: ("Amber", "warn"),
     RISK_CRISIS: ("Crisis", "crit"),
+    "green": ("Green", "ok"),
+    "yellow": ("Yellow", "warn"),
+    "amber": ("Amber", "warn"),
+    "red": ("Red", "crit"),
 }
 
 

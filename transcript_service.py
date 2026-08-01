@@ -60,6 +60,7 @@ def save_transcript(
     history: list[dict],
     *,
     language: str = "",
+    lang_code: str = "",
     risk: str = "",
     status: str = "",
     display_date: str = "",
@@ -68,6 +69,11 @@ def save_transcript(
 
     ``language``, ``risk`` and ``status`` are shown in the PDF header; they are
     optional so a caller that has none of them still gets a usable transcript.
+
+    ``lang_code`` (``ta``, ``bn`` …) drives the English translation the endpoint
+    adds beneath each message. Citta's intake team allocates cases by language
+    and cannot read all seven, so a transcript nobody can read is a transcript
+    nobody acts on. Blank, or ``en``, means no translation block.
 
     Never raises.
     """
@@ -88,6 +94,7 @@ def save_transcript(
                 "sessionDate": session_date,
                 "displayDate": display_date or session_date,
                 "language": language,
+                "langCode": lang_code,
                 "risk": risk,
                 "status": status,
                 "messages": _messages(history),

@@ -159,6 +159,7 @@ def handle_finish_conversation() -> None:
         now.strftime("%Y-%m-%d"),
         st.session_state.messages,
         language=language_label(lang),
+        lang_code=lang,
         risk=risk_label(st.session_state.risk_category),
         status=conversation_status(),
         display_date=now.strftime("%d %B %Y"),

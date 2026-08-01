@@ -165,6 +165,7 @@ def api_finish():
     transcript_url = save_transcript(
         session["employee_id"], now.strftime("%Y-%m-%d"), session["messages"],
         language=language_label(session["lang"]),
+        lang_code=session["lang"],
         risk=risk_label(session["risk_category"]),
         status="Crisis — paused" if session["crisis"] else "Finished",
         display_date=now.strftime("%d %B %Y"),

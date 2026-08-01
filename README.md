@@ -16,8 +16,14 @@ personal responses private from employers.
 - 🚨 **Crisis detection** — deterministic keyword safety net that immediately surfaces emergency guidance and alerts an administrator.
 - 📊 **Structured summaries** — a JSON wellbeing summary (stress, sleep, burnout, workload, manager relationship, and more).
 - 📝 **Google Sheets persistence** — chat summaries, risk flags and support leads.
+- 📄 **Transcript archiving** — every conversation is saved as a PDF in Citta's
+  Drive, with the link recorded on the summary row. Non-English conversations
+  carry a machine English translation beneath each message.
 - 📧 **Email alerts** — admin notifications on risk events and callback requests.
-- 🌐 **Seven languages** — en, hi, kn, ta, te, mr, bn.
+- 📈 **Executive Report** — a de-identified aggregate tab for the employer, built
+  by `tools/build_exec_report.py`.
+- 🌐 **Seven languages** — en, hi, kn, ta, te, mr, bn. The interface, the welcome
+  message and the quick-reply chips are all localised, not just the AI's replies.
 
 ---
 
@@ -34,19 +40,34 @@ citta-companion/
 ├── link_tokens.py        # Signs and verifies employee links (no framework imports)
 ├── make_link.py          # CLI to generate a signed link or a new LINK_SECRET
 ├── config.py             # Env-driven configuration
-├── prompts.py            # System prompt, summary prompt, static copy
+├── prompts.py            # System prompt, summary prompt, localised UI copy
 ├── gemini_service.py     # Gemini init + response generation + JSON mode
-├── summary_generator.py  # Structured JSON summary
+├── summary_generator.py  # Structured JSON summary + risk floor
 ├── risk_detection.py     # Keyword-based crisis detection
 ├── google_sheets.py      # Google Sheets persistence (framework-independent)
+├── transcript_service.py # Sends the conversation to the PDF endpoint
 ├── email_service.py      # Admin alerts
 ├── utils.py              # Query params, session state, helpers
+├── tools/
+│   └── build_exec_report.py   # Rebuilds the Executive Report tab
 ├── static/               # favicon + logo mark (served by Flask)
 ├── assets/               # logo images used by the Streamlit UI
 ├── .streamlit/config.toml
 ├── .env.example
 └── requirements.txt
 ```
+
+Two Apps Script files live **outside this repo**, in the project root, and run
+under `companion@cittarecovery.com`:
+
+| File | Role |
+|---|---|
+| `make-instant-trigger.gs` | fires the Make webhook the moment a form is submitted |
+| `transcript-endpoint.gs` | renders the transcript PDF and writes it to Drive |
+
+They are deployed by pasting into the Apps Script editor. A Web App serves the
+version frozen **at deploy time**, so saving alone changes nothing — use
+**Deploy → Manage deployments → edit → New version**.
 
 ### Two UIs, one backend
 
@@ -188,6 +209,62 @@ appended positionally. Reordering a column in the sheet without updating
 
 ---
 
+## 📄 Transcript archiving
+
+Every finished conversation is saved as a PDF in Citta's Drive folder, and the
+link is written to the `Transcript Link` column of `Chat Summaries`.
+
+The PDF is **not** produced by this app. The service account cannot create Drive
+files at all — Google refuses with *"Service Accounts do not have storage
+quota"* — so `transcript_service.py` posts the conversation to an Apps Script
+Web App running as `companion@cittarecovery.com`, which owns every file it
+creates.
+
+```env
+TRANSCRIPT_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
+TRANSCRIPT_SECRET=a-long-random-string   # must match transcript-endpoint.gs
+```
+
+The endpoint is deployed with **"Who has access: Anyone"**, because Streamlit
+calls it without a Google login. The shared secret is what actually guards it.
+
+Leave either value unset and archiving is skipped silently — the conversation
+and its summary still save. Every failure here is soft by design: losing an
+archive must never also lose the summary.
+
+Conversations held in a language other than English carry a machine English
+translation beneath each message, produced by `LanguageApp.translate` inside the
+Apps Script (free, no API key). The original is always kept above it and the
+translation is labelled machine-generated — for a risk review the exact words
+someone used are the record, and a translation is an interpretation of them.
+
+---
+
+## 📈 Executive Report
+
+The de-identified tab the **employer** receives. Rebuild it with:
+
+```bash
+python3 tools/build_exec_report.py
+```
+
+Safe to re-run — it clears the tab and rewrites it, and holds no typed-in data.
+Every figure is a live formula over the other tabs, so nothing goes stale and no
+individual response is ever copied across.
+
+Two design rules worth knowing before editing it:
+
+- **Participants are counted as distinct Employee IDs**, not rows. Someone who
+  chats twice must not count as two people, or the risk distribution skews
+  toward whoever engaged most.
+- **Sector groups below `MIN_GROUP` (5) are suppressed.** The scope requires
+  sector participation *"where anonymity is protected"*; in a three-person
+  department, one Amber count identifies someone.
+
+See `EXECUTIVE_REPORT.md` in the project root for the full rationale.
+
+---
+
 ## 📧 Email setup
 
 Alerts are **logged instead of sent** while `SMTP_PASSWORD` is `REPLACE_ME`, so
@@ -239,6 +316,9 @@ ADMIN_ALERT_EMAIL=who-gets-risk-alerts@example.com
    SMTP_PASSWORD = "..."
    EMAIL_FROM = "Citta Companion <...>"
    ADMIN_ALERT_EMAIL = "..."
+
+   TRANSCRIPT_WEBHOOK_URL = "https://script.google.com/macros/s/.../exec"
+   TRANSCRIPT_SECRET = "..."
    ```
 
    The deployed app has no writable file system, so `GOOGLE_CREDENTIALS_JSON`
@@ -257,6 +337,16 @@ ADMIN_ALERT_EMAIL=who-gets-risk-alerts@example.com
 
 - **Crisis keywords** immediately pause normal conversation and display
   emergency guidance — the AI is not relied upon for this decision.
+- **The model may not invent support resources.** No phone numbers, helplines,
+  portals or programme names — not even as placeholders. Citta has supplied
+  none, so anything produced would be fabricated, and an invented crisis number
+  is worse than none: someone in distress may dial it. Requests for help are
+  answered with "Citta's wellbeing team will follow up", which is what happens.
+- **Risk has a deterministic floor.** Anyone who asks to speak to a human is
+  Amber at minimum, whatever the model concluded. Prompt wording alone let the
+  same disclosure land in different bands depending on the language it was told
+  in; a risk assessment that varies by language is not an assessment.
+  A keyword-detected crisis always wins and can never be lowered.
 - **Gemini, Google Sheets and network failures** degrade gracefully; a Sheets
   outage never interrupts someone's conversation.
 - **Invalid links** are refused before any conversation starts.

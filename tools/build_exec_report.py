@@ -145,16 +145,12 @@ for i in range(SECTOR_ROWS):
         f'=IF($A{r}="","",IF({invited}<{MIN_GROUP},"Suppressed (n<{MIN_GROUP})",{completed}))',
     ])
 
-ROWS += [
-    ["", "", ""],
-    ["THEMES", "", ""],
-    ["Not yet built — awaiting the client's answer on how themes should be derived "
-     "(AI grouping of the summary text, or manual categorisation by Citta's team).", "", ""],
-    ["Top stress themes", "", "Scope item"],
-    ["Top burnout / workplace pressure themes", "", "Scope item"],
-    ["Suggested intervention themes", "", "Scope item — needs Citta's clinical input"],
-    ["Suggested next-step packages or programmes", "", "Scope item — needs Citta's programme names"],
-]
+# No THEMES section. The scope lists four theme items for this sheet (top
+# stress themes, top burnout/pressure themes, suggested interventions,
+# next-step packages); they were removed at the developer's direction on
+# 4 Aug 2026, before ever being committed — there is no version of this file
+# with theme generation in git. Raise with the client at sign-off before
+# calling the report done; it would need rebuilding from scratch.
 
 # Row numbers the formatter needs. Derived, not hardcoded, so inserting a
 # metric above them doesn't silently paint the wrong rows.
@@ -167,7 +163,7 @@ def _row_of(label):
 
 BANNERS = [_row_of(t) for t in
            ("PARTICIPATION", "RISK CATEGORY DISTRIBUTION", "HUMAN SUPPORT",
-            "PARTICIPATION BY SECTOR", "THEMES")]
+            "PARTICIPATION BY SECTOR")]
 TABLE_HEADS = [_row_of("Metric"), _row_of("Category"), _row_of("Sector")]
 
 ACCENT = {"red": 0.541, "green": 0.392, "blue": 0.125}   # the app's bronze
@@ -241,12 +237,6 @@ def formatting_requests():
     reqs.append(_fmt(pct[2][0], pct[2][0] + 1, {"userEnteredFormat": {
         "numberFormat": {"type": "PERCENT", "pattern": "0.0%"}}},
         "userEnteredFormat.numberFormat", 1, 2))
-    # Theme placeholders read as pending, not as empty data.
-    first_theme = _row_of("Top stress themes")
-    reqs.append(_fmt(first_theme - 1, first_theme + 4, {"userEnteredFormat": {
-        "textFormat": {"italic": True, "foregroundColor": MUTED}}},
-        "userEnteredFormat.textFormat"))
-
     # --- readability -------------------------------------------------------
     # Padding and alignment across the whole block: labels left, figures right,
     # everything vertically centred so the taller section rows don't look

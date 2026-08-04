@@ -232,6 +232,11 @@ Leave either value unset and archiving is skipped silently — the conversation
 and its summary still save. Every failure here is soft by design: losing an
 archive must never also lose the summary.
 
+Archiving runs on **Finish** and also on a **crisis**. A crisis locks the chat
+before Finish exists, so `trigger_crisis` archives directly and the link lands
+in `Risk Flags` → `Transcript Link` — otherwise the one conversation most
+likely to need reviewing would be the only one without a record.
+
 Conversations held in a language other than English carry a machine English
 translation beneath each message, produced by `LanguageApp.translate` inside the
 Apps Script (free, no API key). The original is always kept above it and the

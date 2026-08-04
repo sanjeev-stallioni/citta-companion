@@ -48,6 +48,34 @@ DISTINCT = f'COUNTUNIQUEIFS({CS}!A2:A,{CS}!A2:A,"<>")'
 def risk(cat):
     return f'COUNTUNIQUEIFS({CS}!A2:A,{CS}!A2:A,"<>",{CS}!M2:M,"{cat}")'
 
+
+# People at crisis, from either tab, counted once each.
+#   flagged           - distinct IDs in Risk Flags
+#   summarised crisis - distinct IDs whose summary says Crisis
+#   overlap           - summarised-crisis IDs that are also flagged
+CRISIS_PEOPLE = (
+    f'COUNTUNIQUEIFS({RF}!A2:A,{RF}!A2:A,"<>")'
+    f'+{risk("Crisis")}'
+    f'-SUMPRODUCT(({CS}!M2:M="Crisis")*({CS}!A2:A<>"")'
+    f'*(COUNTIF({RF}!A2:A,{CS}!A2:A)>0))'
+)
+
+# Everyone who had a conversation: summarised, plus anyone flagged who never
+# got that far. Participation must include people whose chat ended in crisis.
+#
+# SUMPRODUCT, not COUNTA(UNIQUE(FILTER(...))). A COUNTIF *inside* FILTER does
+# not evaluate per row, so the "not already in Chat Summaries" condition
+# silently fails to exclude anyone — measured: FILTER returned 1 where the
+# answer was 0. SUMPRODUCT evaluates row by row and is correct.
+#
+# Counts flag ROWS not yet summarised. Two crisis flags for the same person
+# would count twice; acceptable while each crisis locks its own conversation,
+# and visible because Crisis escalations is reported separately.
+PARTICIPANTS = (
+    f'COUNTUNIQUEIFS({CS}!A2:A,{CS}!A2:A,"<>")'
+    f'+SUMPRODUCT(({RF}!A2:A<>"")*(COUNTIF({CS}!A2:A,{RF}!A2:A)=0))'
+)
+
 ROWS = [
     ["Citta Companion — Executive Report", "", ""],
     ["De-identified. Contains no names, emails, phone numbers, individual "
@@ -59,8 +87,8 @@ ROWS = [
     ["Metric", "Value", "Notes"],
     ["Employees invited", f'=COUNTUNIQUEIFS({ER}!B2:B,{ER}!B2:B,"<>")',
      "Distinct Employee IDs in the registry"],
-    ["Employees who completed a conversation", f"={DISTINCT}",
-     "Distinct IDs, so a repeat conversation is not double-counted"],
+    ["Employees who had a conversation", f"={PARTICIPANTS}",
+     "Distinct people. Includes crisis chats, which never reach a summary"],
     ["Participation rate", '=IF(B7=0,"—",B8/B7)', "Completed ÷ invited"],
     ["Conversations recorded", f'=COUNTIF({CS}!A2:A,"<>")',
      "Total rows; exceeds participants if anyone chats twice"],
@@ -72,7 +100,14 @@ ROWS = [
     ["Yellow", f"={risk('Yellow')}", '=IF($B$8=0,"—",B15/$B$8)'],
     ["Amber",  f"={risk('Amber')}",  '=IF($B$8=0,"—",B16/$B$8)'],
     ["Red",    f"={risk('Red')}",    '=IF($B$8=0,"—",B17/$B$8)'],
-    ["Crisis", f"={risk('Crisis')}", '=IF($B$8=0,"—",B18/$B$8)'],
+    # Crisis counts BOTH sources, deduplicated.
+    #
+    # A crisis locks the chat before "Finish", so those conversations never
+    # write a Chat Summaries row. Counting summaries alone reported "Crisis 0"
+    # in a pilot where people had genuinely reached crisis — the single most
+    # consequential figure to under-report. Anyone appearing in both tabs (a
+    # crisis on a later visit, after an earlier completed chat) is counted once.
+    ["Crisis", f"={CRISIS_PEOPLE}", '=IF($B$8=0,"—",B18/$B$8)'],
     ["Uncategorised", '=MAX(0,$B$8-SUM(B14:B18))', '=IF($B$8=0,"—",B19/$B$8)'],
     ["", "", ""],
 
@@ -248,7 +283,7 @@ def formatting_requests():
             "userEnteredFormat.textFormat", 0, 1))
 
     # The denominator every rate divides by — worth finding at a glance.
-    r = _row_of("Employees who completed a conversation")
+    r = _row_of("Employees who had a conversation")
     reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {
         "textFormat": {"bold": True}}}, "userEnteredFormat.textFormat", 0, 2))
 

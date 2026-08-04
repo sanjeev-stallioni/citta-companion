@@ -200,11 +200,33 @@ def trigger_crisis(trigger_message: str) -> None:
     sector = st.session_state.sector
     lang = st.session_state.lang
 
-    # Alert first so the sheet can record whether the admin was actually reached.
+    # Alert first: the sheet records whether the admin was actually reached, and
+    # the alert is the fastest path to a human. Nothing below may delay it.
     alerted = send_admin_alert(emp, sector, RISK_CRISIS, keywords, trigger_message)
+
+    # Archive before writing the flag, so the flag row can carry the link.
+    #
+    # This conversation never reaches "Finish" — a crisis locks the chat
+    # immediately, and every other archive path hangs off that button. Without
+    # this, the one conversation most likely to need reviewing would be the only
+    # one with no transcript, while `Risk Flags` deliberately records the fact
+    # of the flag rather than the words. The crisis reply is appended by the
+    # caller after this returns, so it is included here explicitly.
+    now = datetime.now()
+    history = st.session_state.messages + [
+        {"role": "assistant", "content": CRISIS_MESSAGE, "ts": _timestamp()}
+    ]
+    transcript_url = save_transcript(
+        emp, now.strftime("%Y-%m-%d"), history,
+        language=language_label(lang), lang_code=lang,
+        risk=risk_label(RISK_CRISIS), status="Crisis — paused",
+        display_date=now.strftime("%d %B %Y"),
+    )
+
     save_risk_flag(
         emp, sector, lang, RISK_CRISIS, keywords, trigger_message,
         detection_method="keyword", admin_email_sent=alerted,
+        transcript_url=transcript_url,
     )
 
 

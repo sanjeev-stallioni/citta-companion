@@ -58,6 +58,7 @@ _HEADERS = {
         "Reviewed By",
         "Review Date",
         "Review Status",
+        "Transcript Link",
     ],
     config.WORKSHEET_SUPPORT_LEADS: [
         "Employee ID",
@@ -250,6 +251,7 @@ def save_risk_flag(
     trigger_message: str,
     detection_method: str = "keyword",
     admin_email_sent: bool = False,
+    transcript_url: str = "",
 ) -> bool:
     """Persist a risk/crisis flag. Returns success flag.
 
@@ -269,6 +271,7 @@ def save_risk_flag(
         "",  # Reviewed By
         "",  # Review Date
         "",  # Review Status
+        transcript_url,
     ]
     return _append(config.WORKSHEET_RISK_FLAGS, row)
 

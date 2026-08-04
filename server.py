@@ -140,10 +140,23 @@ def api_chat():
             session["employee_id"], session["sector"], RISK_CRISIS,
             keywords, message,
         )
+        # Archive before the flag, so the flag row carries the link. A crisis
+        # conversation never reaches /api/finish, so this is its only archive.
+        now = datetime.now()
+        history = session["messages"] + [
+            {"role": "assistant", "content": CRISIS_MESSAGE}
+        ]
+        transcript_url = save_transcript(
+            session["employee_id"], now.strftime("%Y-%m-%d"), history,
+            language=language_label(session["lang"]), lang_code=session["lang"],
+            risk=risk_label(RISK_CRISIS), status="Crisis — paused",
+            display_date=now.strftime("%d %B %Y"),
+        )
         save_risk_flag(
             session["employee_id"], session["sector"], session["lang"],
             RISK_CRISIS, keywords, message,
             detection_method="keyword", admin_email_sent=alerted,
+            transcript_url=transcript_url,
         )
         session["messages"].append({"role": "assistant", "content": CRISIS_MESSAGE})
         return jsonify({"reply": CRISIS_MESSAGE, "crisis": True})

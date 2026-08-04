@@ -76,6 +76,14 @@ GOOGLE_SHEET_NAME = _get_env("GOOGLE_SHEET_NAME", "Citta Companion")
 WORKSHEET_SUMMARIES = _get_env("WORKSHEET_SUMMARIES", "Chat Summaries")
 WORKSHEET_RISK_FLAGS = _get_env("WORKSHEET_RISK_FLAGS", "Risk Flags")
 WORKSHEET_SUPPORT_LEADS = _get_env("WORKSHEET_SUPPORT_LEADS", "Support Leads")
+WORKSHEET_REGISTRY = _get_env("WORKSHEET_REGISTRY", "Employee Registry")
+
+# Require the Employee ID in a link to exist in the registry before a chat may
+# start. Off by default so local development and tests keep working without
+# Sheets credentials; set REQUIRE_REGISTERED_ID=true in the deployed app.
+REQUIRE_REGISTERED_ID = _get_env("REQUIRE_REGISTERED_ID", "false").lower() in (
+    "1", "true", "yes",
+)
 
 # ---------------------------------------------------------------------------
 # Email configuration (placeholders — no real credentials committed)

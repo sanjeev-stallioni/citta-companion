@@ -14,6 +14,35 @@ from risk_detection import (
 )
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _registry_lookup(employee_id: str) -> bool | None:
+    """Cached registry membership check (5 minutes).
+
+    Cached because Streamlit re-runs the whole script on every interaction; an
+    uncached call would hit Sheets on each keystroke-triggered rerun.
+    """
+    from google_sheets import employee_exists
+
+    return employee_exists(employee_id)
+
+
+def _is_registered(employee_id: str) -> bool:
+    """Whether a chat may start for ``employee_id``.
+
+    Fails **open**: if the registry cannot be read, the conversation proceeds.
+    Someone reaching out about their mental health must not be turned away by a
+    spreadsheet outage — the signature has already proved the link is genuine,
+    and this check only adds defence against a link minted for an ID that was
+    never registered.
+    """
+    if not config.REQUIRE_REGISTERED_ID:
+        return True
+    exists = _registry_lookup(employee_id)
+    if exists is None:
+        return True  # unknown — let them in, and log upstream
+    return exists
+
+
 def get_query_params() -> dict:
     """Resolve the employee context from the URL.
 
@@ -42,6 +71,8 @@ def get_query_params() -> dict:
     if config.LINK_SECRET:
         data = link_tokens.verify(_first("t", ""))
         if data is None:
+            return {**defaults, "valid": False}
+        if not _is_registered(data.get("employee_id", "")):
             return {**defaults, "valid": False}
         return {**data, "valid": True}
 

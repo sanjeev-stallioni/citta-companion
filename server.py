@@ -27,7 +27,12 @@ from gemini_service import (
     generate_response,
     initialize_model,
 )
-from google_sheets import save_chat_summary, save_risk_flag, save_support_lead
+from google_sheets import (
+    employee_exists,
+    save_chat_summary,
+    save_risk_flag,
+    save_support_lead,
+)
 from prompts import (
     CRISIS_MESSAGE,
     FALLBACK_ERROR_MESSAGE,
@@ -75,6 +80,13 @@ def index():
         link = link_tokens.verify(request.args.get("t", ""))
         if link is None:
             return render_template("invalid_link.html"), 403
+        # A valid signature proves the link was minted with our secret, not that
+        # the employee exists. employee_exists returns None on a Sheets outage,
+        # which is treated as "allow" — never turn a real person away.
+        if config.REQUIRE_REGISTERED_ID:
+            if employee_exists(link["employee_id"]) is False:
+                logger.warning("Refused unregistered ID: %s", link["employee_id"])
+                return render_template("invalid_link.html"), 403
         employee_id, sector, lang = link["employee_id"], link["sector"], link["lang"]
     else:
         employee_id = _first_param("id", config.DEFAULT_EMPLOYEE_ID)

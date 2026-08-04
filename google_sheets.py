@@ -91,6 +91,40 @@ class GoogleSheetsUnavailableError(RuntimeError):
     """Raised internally when Sheets cannot be reached."""
 
 
+def employee_exists(employee_id: str) -> bool | None:
+    """Is ``employee_id`` present in the Employee Registry?
+
+    Returns ``True``/``False``, or ``None`` when the answer is unknown because
+    Sheets could not be reached. The caller must distinguish those: turning a
+    real employee away during a Sheets outage is a worse failure than letting an
+    unregistered ID through, so ``None`` should be treated as "allow".
+
+    A valid signature alone does not prove an employee exists — it only proves
+    the link was minted with our secret. This is what closes that gap.
+    """
+    if not str(employee_id or "").strip():
+        return False
+    try:
+        client = _get_client()
+        spreadsheet = _open_spreadsheet(client)
+        worksheet = spreadsheet.worksheet(config.WORKSHEET_REGISTRY)
+        # Column B holds Employee ID; col_values is one call, not a full fetch.
+        ids = {str(v).strip() for v in worksheet.col_values(2)[1:] if str(v).strip()}
+    except gspread.WorksheetNotFound:
+        logger.warning(
+            "Registry tab '%s' not found; cannot verify employee IDs.",
+            config.WORKSHEET_REGISTRY,
+        )
+        return None
+    except GoogleSheetsUnavailableError as exc:
+        logger.warning("Registry check unavailable: %s", exc)
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Registry check failed: %s", exc)
+        return None
+    return str(employee_id).strip() in ids
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 

@@ -10,8 +10,11 @@ Design notes:
 * Every figure is a live formula over `Chat Summaries` / `Risk Flags` /
   `Employee Registry`. Nothing is copied, so nothing can go stale, and no
   individual response is ever reproduced here.
-* Participants are counted as DISTINCT Employee IDs, not rows. A second
-  conversation by the same person must not count as a second participant.
+* Participants are counted as DISTINCT REGISTERED Employee IDs, not rows.
+  A second conversation by the same person must not count as a second
+  participant, and an ID absent from the registry (test chat, deleted
+  registration) must not count at all — it once pushed participation past
+  100%. Excluded rows surface in "Conversations from unregistered IDs".
 * Sector participation suppresses any group below MIN_GROUP. The scope requires
   sector-wise participation "where anonymity is protected"; in a 3-person
   department an Amber count identifies someone.
@@ -38,42 +41,46 @@ CS = "'Chat Summaries'"
 RF = "'Risk Flags'"
 ER = "'Employee Registry'"
 
-# Distinct completed participants: unique IDs present in Chat Summaries.
+# Every people-count below walks the REGISTRY and asks "does this person
+# appear in the data tab?", never the other way round. Registry IDs are unique
+# per person, so distinctness is free — and an ID that is not in the registry
+# (a test chat, a self-minted link before the registry check existed, a row
+# deleted after the fact) cannot inflate any figure. Counting the data tabs
+# directly let those rows push the participation rate past 100%.
 #
-# COUNTUNIQUEIFS, not COUNTA(UNIQUE(FILTER(...))). FILTER returns #N/A when
-# nothing matches, and wrapping that in COUNTA counts the error itself as one
-# item — so every empty risk category reported 1 instead of 0.
-DISTINCT = f'COUNTUNIQUEIFS({CS}!A2:A,{CS}!A2:A,"<>")'
-# Distinct IDs at a given risk category.
+# The excluded rows are not hidden: "Conversations from unregistered IDs"
+# reports them, and should read 0.
+#
+# SUMPRODUCT, not COUNTA(UNIQUE(FILTER(...))) and not COUNTIF inside FILTER —
+# both fail silently (see EXECUTIVE_REPORT.md). COUNTIF/COUNTIFS with a range
+# as the criterion evaluates per row inside SUMPRODUCT.
+
+# Registered people whose summary says a given risk category.
 def risk(cat):
-    return f'COUNTUNIQUEIFS({CS}!A2:A,{CS}!A2:A,"<>",{CS}!M2:M,"{cat}")'
+    return (f'SUMPRODUCT(({ER}!B2:B<>"")'
+            f'*(COUNTIFS({CS}!A2:A,{ER}!B2:B,{CS}!M2:M,"{cat}")>0))')
 
 
-# People at crisis, from either tab, counted once each.
-#   flagged           - distinct IDs in Risk Flags
-#   summarised crisis - distinct IDs whose summary says Crisis
-#   overlap           - summarised-crisis IDs that are also flagged
+# Registered people at crisis, from either tab, counted once each. A crisis
+# locks the chat before "Finish", so those conversations often exist only as
+# a Risk Flags row, never a summary.
 CRISIS_PEOPLE = (
-    f'COUNTUNIQUEIFS({RF}!A2:A,{RF}!A2:A,"<>")'
-    f'+{risk("Crisis")}'
-    f'-SUMPRODUCT(({CS}!M2:M="Crisis")*({CS}!A2:A<>"")'
-    f'*(COUNTIF({RF}!A2:A,{CS}!A2:A)>0))'
+    f'SUMPRODUCT(({ER}!B2:B<>"")'
+    f'*((COUNTIF({RF}!A2:A,{ER}!B2:B)'
+    f'+COUNTIFS({CS}!A2:A,{ER}!B2:B,{CS}!M2:M,"Crisis"))>0))'
 )
 
-# Everyone who had a conversation: summarised, plus anyone flagged who never
-# got that far. Participation must include people whose chat ended in crisis.
-#
-# SUMPRODUCT, not COUNTA(UNIQUE(FILTER(...))). A COUNTIF *inside* FILTER does
-# not evaluate per row, so the "not already in Chat Summaries" condition
-# silently fails to exclude anyone — measured: FILTER returned 1 where the
-# answer was 0. SUMPRODUCT evaluates row by row and is correct.
-#
-# Counts flag ROWS not yet summarised. Two crisis flags for the same person
-# would count twice; acceptable while each crisis locks its own conversation,
-# and visible because Crisis escalations is reported separately.
+# Registered people who had a conversation: a summary, a risk flag, or both.
 PARTICIPANTS = (
-    f'COUNTUNIQUEIFS({CS}!A2:A,{CS}!A2:A,"<>")'
-    f'+SUMPRODUCT(({RF}!A2:A<>"")*(COUNTIF({CS}!A2:A,{RF}!A2:A)=0))'
+    f'SUMPRODUCT(({ER}!B2:B<>"")'
+    f'*((COUNTIF({CS}!A2:A,{ER}!B2:B)+COUNTIF({RF}!A2:A,{ER}!B2:B))>0))'
+)
+
+# Rows in the data tabs whose ID is NOT in the registry — the rows every
+# figure above excludes. Anything other than 0 deserves a look.
+UNMATCHED = (
+    f'SUMPRODUCT(({CS}!A2:A<>"")*(COUNTIF({ER}!B2:B,{CS}!A2:A)=0))'
+    f'+SUMPRODUCT(({RF}!A2:A<>"")*(COUNTIF({ER}!B2:B,{RF}!A2:A)=0))'
 )
 
 ROWS = [
@@ -88,35 +95,35 @@ ROWS = [
     ["Employees invited", f'=COUNTUNIQUEIFS({ER}!B2:B,{ER}!B2:B,"<>")',
      "Distinct Employee IDs in the registry"],
     ["Employees who had a conversation", f"={PARTICIPANTS}",
-     "Distinct people. Includes crisis chats, which never reach a summary"],
+     "Distinct registered people. Includes crisis chats, which never reach a summary"],
     ["Participation rate", '=IF(B7=0,"—",B8/B7)', "Completed ÷ invited"],
     ["Conversations recorded", f'=COUNTIF({CS}!A2:A,"<>")',
      "Total rows; exceeds participants if anyone chats twice"],
+    ["Conversations from unregistered IDs", f"={UNMATCHED}",
+     "Should be 0. Rows whose ID is not in the registry — test chats or "
+     "deleted registrations; excluded from every figure above"],
     ["", "", ""],
 
     ["RISK CATEGORY DISTRIBUTION", "", ""],
     ["Category", "Employees", "Share"],
-    ["Green",  f"={risk('Green')}",  '=IF($B$8=0,"—",B14/$B$8)'],
-    ["Yellow", f"={risk('Yellow')}", '=IF($B$8=0,"—",B15/$B$8)'],
-    ["Amber",  f"={risk('Amber')}",  '=IF($B$8=0,"—",B16/$B$8)'],
-    ["Red",    f"={risk('Red')}",    '=IF($B$8=0,"—",B17/$B$8)'],
-    # Crisis counts BOTH sources, deduplicated.
-    #
-    # A crisis locks the chat before "Finish", so those conversations never
-    # write a Chat Summaries row. Counting summaries alone reported "Crisis 0"
-    # in a pilot where people had genuinely reached crisis — the single most
-    # consequential figure to under-report. Anyone appearing in both tabs (a
-    # crisis on a later visit, after an earlier completed chat) is counted once.
-    ["Crisis", f"={CRISIS_PEOPLE}", '=IF($B$8=0,"—",B18/$B$8)'],
-    ["Uncategorised", '=MAX(0,$B$8-SUM(B14:B18))', '=IF($B$8=0,"—",B19/$B$8)'],
+    ["Green",  f"={risk('Green')}",  '=IF($B$8=0,"—",B15/$B$8)'],
+    ["Yellow", f"={risk('Yellow')}", '=IF($B$8=0,"—",B16/$B$8)'],
+    ["Amber",  f"={risk('Amber')}",  '=IF($B$8=0,"—",B17/$B$8)'],
+    ["Red",    f"={risk('Red')}",    '=IF($B$8=0,"—",B18/$B$8)'],
+    # Crisis counts BOTH sources, deduplicated. Counting summaries alone
+    # reported "Crisis 0" in a pilot where someone had genuinely reached
+    # crisis — the single most consequential figure to under-report.
+    ["Crisis", f"={CRISIS_PEOPLE}", '=IF($B$8=0,"—",B19/$B$8)'],
+    ["Uncategorised", '=MAX(0,$B$8-SUM(B15:B19))', '=IF($B$8=0,"—",B20/$B$8)'],
     ["", "", ""],
 
     ["HUMAN SUPPORT", "", ""],
     ["Metric", "Value", "Notes"],
     ["Employees requesting human support",
-     f'=COUNTUNIQUEIFS({CS}!A2:A,{CS}!A2:A,"<>",{CS}!K2:K,"Yes")',
-     "Distinct IDs answering Yes"],
-    ["Percentage requesting human support", '=IF($B$8=0,"—",B23/$B$8)',
+     f'=SUMPRODUCT(({ER}!B2:B<>"")'
+     f'*(COUNTIFS({CS}!A2:A,{ER}!B2:B,{CS}!K2:K,"Yes")>0))',
+     "Distinct registered people answering Yes"],
+    ["Percentage requesting human support", '=IF($B$8=0,"—",B24/$B$8)',
      "Scope item: percentage, not count"],
     ["Crisis escalations raised", f'=COUNTIF({RF}!A2:A,"<>")',
      "Rows in Risk Flags; count only, never the trigger text"],
@@ -191,6 +198,11 @@ def formatting_requests():
         # every column. On a report it just paints row 1 blue and hangs dropdown
         # arrows off the title. There is nothing here to filter.
         {"clearBasicFilter": {"sheetId": SHEET_ID}},
+        # Reset ALL formatting first. Rebuilds move rows, and a number format
+        # left behind by an earlier layout silently restyles whatever lands on
+        # that row next — a count of 1 once rendered as "100.0%" because the
+        # percentage row had shifted down one.
+        _fmt(0, 200, {"userEnteredFormat": {}}, "userEnteredFormat", 0, 26),
         # Hide gridlines and the unused columns, so this reads as a report
         # rather than a spreadsheet someone stopped filling in.
         {"updateSheetProperties": {

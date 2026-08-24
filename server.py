@@ -29,6 +29,9 @@ from gemini_service import (
 )
 from google_sheets import (
     employee_exists,
+    mark_chat_completed,
+    mark_chat_started,
+    mark_summary_generated,
     save_chat_summary,
     save_risk_flag,
     save_support_lead,
@@ -128,6 +131,11 @@ def api_chat():
     if session["crisis"] or session["finished"]:
         return jsonify({"error": "conversation is closed"}), 409
 
+    # Fire-and-forget, first turn only. Sits on the critical path of the
+    # employee's first reply, so it must never block or retry.
+    if len(session["messages"]) <= 1:
+        mark_chat_started(session["employee_id"])
+
     session["messages"].append({"role": "user", "content": message})
 
     # Deterministic crisis check runs before the model.
@@ -158,6 +166,9 @@ def api_chat():
             detection_method="keyword", admin_email_sent=alerted,
             transcript_url=transcript_url,
         )
+        # A crisis never reaches /api/finish, so this is the only place that
+        # conversation's registry row gets marked as completed.
+        mark_chat_completed(session["employee_id"], RISK_CRISIS)
         session["messages"].append({"role": "assistant", "content": CRISIS_MESSAGE})
         return jsonify({"reply": CRISIS_MESSAGE, "crisis": True})
 
@@ -205,12 +216,20 @@ def api_finish():
         session["employee_id"], session["sector"], session["lang"], summary,
         transcript_url,
     )
+    if saved:
+        mark_summary_generated(session["employee_id"])
     if str(summary.get("human_support_requested", "")).lower() == "yes":
         save_support_lead(
             session["employee_id"], session["sector"], session["lang"],
             "yes", summary.get("summary", ""),
             risk_category=summary.get("risk_category", ""),
         )
+
+    mark_chat_completed(
+        session["employee_id"],
+        session["risk_category"],
+        summary.get("human_support_requested", ""),
+    )
     return jsonify({"summary": summary, "saved": saved})
 
 

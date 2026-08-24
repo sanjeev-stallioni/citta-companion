@@ -204,6 +204,113 @@ def _append(worksheet_name: str, row: list) -> bool:
         return False
 
 
+# Employee Registry status columns (1-indexed, matching the live sheet).
+# Unlike every other tab, the registry is never appended to by this app — it
+# is owned by the Make scenario. These writers find an existing row by
+# Employee ID and update named cells in place.
+_REGISTRY_COL_EMPLOYEE_ID = 2
+_REGISTRY_COL_CHAT_STARTED = 17
+_REGISTRY_COL_CHAT_COMPLETED = 18
+_REGISTRY_COL_RISK_CATEGORY = 19
+_REGISTRY_COL_HUMAN_SUPPORT = 20
+_REGISTRY_COL_SUMMARY_GENERATED = 22
+_REGISTRY_COL_LAST_UPDATED = 23
+
+
+def _find_registry_row(worksheet: gspread.Worksheet, employee_id: str) -> int | None:
+    """Return the 1-indexed sheet row for ``employee_id``, or ``None``."""
+    ids = worksheet.col_values(_REGISTRY_COL_EMPLOYEE_ID)
+    target = str(employee_id).strip()
+    for i, value in enumerate(ids, start=1):
+        if str(value).strip() == target:
+            return i
+    return None
+
+
+def _update_registry_status(employee_id: str, updates: dict[int, str]) -> bool:
+    """Update named cells on the Employee Registry row for ``employee_id``.
+
+    ``updates`` maps 1-indexed column number to the value to write. Silently
+    does nothing if the ID is not found — an unregistered ID (a test chat, a
+    hand-minted link) must not create a row here; ``employee_exists`` /
+    ``REQUIRE_REGISTERED_ID`` are what gate access, not this writer.
+
+    Fails soft like every other writer: returns ``False`` and logs rather than
+    raising, so a Sheets hiccup never blocks the conversation itself.
+    """
+    if not str(employee_id or "").strip():
+        return False
+    try:
+        client = _get_client()
+        spreadsheet = _open_spreadsheet(client)
+        worksheet = spreadsheet.worksheet(config.WORKSHEET_REGISTRY)
+        row = _find_registry_row(worksheet, employee_id)
+        if row is None:
+            logger.info(
+                "Registry status update skipped: '%s' not found.", employee_id
+            )
+            return False
+
+        cells = [
+            gspread.Cell(row, col, value) for col, value in updates.items()
+        ]
+        cells.append(
+            gspread.Cell(row, _REGISTRY_COL_LAST_UPDATED, _now())
+        )
+        worksheet.update_cells(cells, value_input_option="USER_ENTERED")
+        return True
+    except gspread.WorksheetNotFound:
+        logger.warning(
+            "Registry tab '%s' not found; cannot update status.",
+            config.WORKSHEET_REGISTRY,
+        )
+        return False
+    except GoogleSheetsUnavailableError as exc:
+        logger.warning("Registry status update unavailable: %s", exc)
+        return False
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Registry status update failed: %s", exc)
+        return False
+
+
+def mark_chat_started(employee_id: str) -> bool:
+    """Set ``Chat Started`` the first time an employee sends a message.
+
+    Fire-and-forget: called on the first turn of every conversation, so it
+    sits on the critical path of someone's first reply. A re-chat overwrites
+    the previous timestamp — the registry tracks the most recent session, not
+    a history of them (that history lives in Chat Summaries / Risk Flags).
+    """
+    return _update_registry_status(
+        employee_id, {_REGISTRY_COL_CHAT_STARTED: _now()}
+    )
+
+
+def mark_chat_completed(
+    employee_id: str, risk_category: str, human_support_requested: str = ""
+) -> bool:
+    """Set ``Chat Completed``, ``Risk Category`` and ``Human Support Requested``.
+
+    Called both when a conversation reaches Finish and when it ends in
+    crisis — a crisis never reaches Finish, so without this call that
+    conversation would look permanently abandoned in the registry.
+    """
+    updates = {
+        _REGISTRY_COL_CHAT_COMPLETED: _now(),
+        _REGISTRY_COL_RISK_CATEGORY: _titled(risk_category),
+    }
+    if human_support_requested:
+        updates[_REGISTRY_COL_HUMAN_SUPPORT] = _titled(human_support_requested)
+    return _update_registry_status(employee_id, updates)
+
+
+def mark_summary_generated(employee_id: str) -> bool:
+    """Set ``Summary Generated`` once the AI summary has been written."""
+    return _update_registry_status(
+        employee_id, {_REGISTRY_COL_SUMMARY_GENERATED: "Yes"}
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------

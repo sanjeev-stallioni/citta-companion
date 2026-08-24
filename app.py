@@ -24,7 +24,14 @@ from gemini_service import (
     generate_response,
     initialize_model,
 )
-from google_sheets import save_chat_summary, save_risk_flag, save_support_lead
+from google_sheets import (
+    mark_chat_completed,
+    mark_chat_started,
+    mark_summary_generated,
+    save_chat_summary,
+    save_risk_flag,
+    save_support_lead,
+)
 from transcript_service import save_transcript
 from prompts import (
     CRISIS_MESSAGE,
@@ -183,11 +190,19 @@ def handle_finish_conversation() -> None:
             "We couldn't save your summary to our records right now, but your "
             "conversation is still complete."
         )
+    else:
+        mark_summary_generated(emp)
     if str(summary.get("human_support_requested", "")).lower() == "yes":
         save_support_lead(
             emp, sector, lang, "yes", summary.get("summary", ""),
             risk_category=summary.get("risk_category", ""),
         )
+
+    mark_chat_completed(
+        emp,
+        st.session_state.risk_category,
+        summary.get("human_support_requested", ""),
+    )
 
 
 def trigger_crisis(trigger_message: str) -> None:
@@ -229,6 +244,11 @@ def trigger_crisis(trigger_message: str) -> None:
         transcript_url=transcript_url,
     )
 
+    # A crisis locks the chat before "Finish", so this is the only place that
+    # conversation's registry row gets marked — without it, a crisis chat
+    # looks permanently abandoned in the registry rather than escalated.
+    mark_chat_completed(emp, RISK_CRISIS)
+
 
 def render_summary() -> None:
     """Display the structured summary after the conversation ends."""
@@ -260,6 +280,12 @@ def render_summary() -> None:
 # ---------------------------------------------------------------------------
 def handle_turn(user_message: str) -> None:
     """Process one user message: crisis-check, generate reply, persist."""
+    # Fire-and-forget, first turn only. This sits on the critical path of the
+    # employee's first reply, so it must never block or retry — a missed
+    # timestamp here is a visibility gap for Citta's team, not a data-loss risk.
+    if len(st.session_state.messages) <= 1:
+        mark_chat_started(st.session_state.employee_id)
+
     _add_message("user", user_message)
 
     if detect_risk(user_message) == RISK_CRISIS:

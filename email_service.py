@@ -26,6 +26,21 @@ def _send_email(to_address: str, subject: str, body: str) -> bool:
         logger.warning("No recipient address provided; skipping email.")
         return False
 
+    # Guard: a placeholder RECIPIENT is worse than no recipient at all.
+    #
+    # example.com is reserved and silently discards mail, so SMTP would report
+    # success, this would return True, and `Risk Flags` would record "Admin
+    # Email Sent: Yes" for a crisis alert nobody ever receives. Deployment has
+    # always had a real address in Streamlit secrets, so this has never bitten
+    # in production — it was the default sitting in a local .env. Kept because
+    # the failure it prevents is invisible exactly where it matters most.
+    if "@example.com" in to_address.lower():
+        logger.error(
+            "ADMIN_ALERT_EMAIL is still the placeholder %s — alert NOT "
+            "delivered. Set a real address in Streamlit secrets.", to_address,
+        )
+        return False
+
     # Guard: don't attempt real delivery with placeholder credentials.
     if config.SMTP_PASSWORD in (None, "", "REPLACE_ME"):
         logger.info(

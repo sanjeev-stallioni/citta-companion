@@ -37,6 +37,27 @@ MIN_GROUP = 5          # suppress sector rows below this headcount
 SECTOR_ROWS = 12       # how many sector lines the block allows for
 SHEET_ID = 773585386   # Executive Report
 
+# Ranges are built with INDIRECT so Google cannot rewrite them.
+#
+# Make inserts each new registration as a ROW INSERT at the top of the data
+# area, and Sheets helpfully "fixes" every formula pointing below it: a range
+# written as B2:B silently became B3:B, then B4:B, drifting one row per
+# registration. The report then read past its own data and declared every
+# registered employee unregistered — invited 0, "Conversations from
+# unregistered IDs" 2, with two perfectly good employees in the registry.
+#
+# This was misdiagnosed once as a stale rebuild (24 Aug). Rebuilding did fix
+# it, but only by resetting ranges that promptly drifted again on the next two
+# registrations. INDIRECT takes a STRING, so there is no reference for Sheets
+# to adjust and the range means the same thing forever.
+#
+# Cost: INDIRECT is not lazily evaluated, so the tab recalculates a little more
+# eagerly. At this data size that is irrelevant, and correctness wins.
+def _r(tab: str, a1: str) -> str:
+    """A range immune to row insertion, e.g. _r(ER, "B2:B")."""
+    return f'INDIRECT("{tab}!{a1}")'
+
+
 CS = "'Chat Summaries'"
 RF = "'Risk Flags'"
 ER = "'Employee Registry'"
@@ -57,30 +78,30 @@ ER = "'Employee Registry'"
 
 # Registered people whose summary says a given risk category.
 def risk(cat):
-    return (f'SUMPRODUCT(({ER}!B2:B<>"")'
-            f'*(COUNTIFS({CS}!A2:A,{ER}!B2:B,{CS}!M2:M,"{cat}")>0))')
+    return (f'SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
+            f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"M2:M")},"{cat}")>0))')
 
 
 # Registered people at crisis, from either tab, counted once each. A crisis
 # locks the chat before "Finish", so those conversations often exist only as
 # a Risk Flags row, never a summary.
 CRISIS_PEOPLE = (
-    f'SUMPRODUCT(({ER}!B2:B<>"")'
-    f'*((COUNTIF({RF}!A2:A,{ER}!B2:B)'
-    f'+COUNTIFS({CS}!A2:A,{ER}!B2:B,{CS}!M2:M,"Crisis"))>0))'
+    f'SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
+    f'*((COUNTIF({_r(RF,"A2:A")},{_r(ER,"B2:B")})'
+    f'+COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"M2:M")},"Crisis"))>0))'
 )
 
 # Registered people who had a conversation: a summary, a risk flag, or both.
 PARTICIPANTS = (
-    f'SUMPRODUCT(({ER}!B2:B<>"")'
-    f'*((COUNTIF({CS}!A2:A,{ER}!B2:B)+COUNTIF({RF}!A2:A,{ER}!B2:B))>0))'
+    f'SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
+    f'*((COUNTIF({_r(CS,"A2:A")},{_r(ER,"B2:B")})+COUNTIF({_r(RF,"A2:A")},{_r(ER,"B2:B")}))>0))'
 )
 
 # Rows in the data tabs whose ID is NOT in the registry — the rows every
 # figure above excludes. Anything other than 0 deserves a look.
 UNMATCHED = (
-    f'SUMPRODUCT(({CS}!A2:A<>"")*(COUNTIF({ER}!B2:B,{CS}!A2:A)=0))'
-    f'+SUMPRODUCT(({RF}!A2:A<>"")*(COUNTIF({ER}!B2:B,{RF}!A2:A)=0))'
+    f'SUMPRODUCT(({_r(CS,"A2:A")}<>"")*(COUNTIF({_r(ER,"B2:B")},{_r(CS,"A2:A")})=0))'
+    f'+SUMPRODUCT(({_r(RF,"A2:A")}<>"")*(COUNTIF({_r(ER,"B2:B")},{_r(RF,"A2:A")})=0))'
 )
 
 ROWS = [
@@ -92,12 +113,12 @@ ROWS = [
 
     ["PARTICIPATION", "", ""],
     ["Metric", "Value", "Notes"],
-    ["Employees invited", f'=COUNTUNIQUEIFS({ER}!B2:B,{ER}!B2:B,"<>")',
+    ["Employees invited", f'=COUNTUNIQUEIFS({_r(ER,"B2:B")},{_r(ER,"B2:B")},"<>")',
      "Distinct Employee IDs in the registry"],
     ["Employees who had a conversation", f"={PARTICIPANTS}",
      "Distinct registered people. Includes crisis chats, which never reach a summary"],
     ["Participation rate", '=IF(B7=0,"—",B8/B7)', "Completed ÷ invited"],
-    ["Conversations recorded", f'=COUNTIF({CS}!A2:A,"<>")',
+    ["Conversations recorded", f'=COUNTIF({_r(CS,"A2:A")},"<>")',
      "Total rows; exceeds participants if anyone chats twice"],
     ["Conversations from unregistered IDs", f"={UNMATCHED}",
      "Should be 0. Rows whose ID is not in the registry — test chats or "
@@ -120,12 +141,12 @@ ROWS = [
     ["HUMAN SUPPORT", "", ""],
     ["Metric", "Value", "Notes"],
     ["Employees requesting human support",
-     f'=SUMPRODUCT(({ER}!B2:B<>"")'
-     f'*(COUNTIFS({CS}!A2:A,{ER}!B2:B,{CS}!K2:K,"Yes")>0))',
+     f'=SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
+     f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"K2:K")},"Yes")>0))',
      "Distinct registered people answering Yes"],
     ["Percentage requesting human support", '=IF($B$8=0,"—",B24/$B$8)',
      "Scope item: percentage, not count"],
-    ["Crisis escalations raised", f'=COUNTIF({RF}!A2:A,"<>")',
+    ["Crisis escalations raised", f'=COUNTIF({_r(RF,"A2:A")},"<>")',
      "Rows in Risk Flags; count only, never the trigger text"],
     ["", "", ""],
 
@@ -140,8 +161,8 @@ ROWS = [
 SECTOR_START = len(ROWS) + 1  # 1-indexed row of the first sector line
 for i in range(SECTOR_ROWS):
     r = SECTOR_START + i
-    src = (f'IFERROR(INDEX(SORT(UNIQUE(FILTER({ER}!I2:I,{ER}!I2:I<>""))),{i+1},1),"")')
-    invited = f'COUNTIF({ER}!I2:I,$A{r})'
+    src = (f'IFERROR(INDEX(SORT(UNIQUE(FILTER({_r(ER,"I2:I")},{_r(ER,"I2:I")}<>""))),{i+1},1),"")')
+    invited = f'COUNTIF({_r(ER,"I2:I")},$A{r})'
     # Count registry rows for this sector whose ID appears in Chat Summaries
     # OR Risk Flags. Both tabs, for the same reason the headline participation
     # figure counts both: a crisis locks the chat before "Finish", so those
@@ -150,9 +171,9 @@ for i in range(SECTOR_ROWS):
     # crisis — verified live on 24 Aug with two probe employees.
     #
     # SUMPRODUCT tolerates no matches; FILTER would return #N/A.
-    completed = (f'SUMPRODUCT(({ER}!I2:I=$A{r})*'
-                 f'((COUNTIF({CS}!A2:A,{ER}!B2:B)'
-                 f'+COUNTIF({RF}!A2:A,{ER}!B2:B))>0))')
+    completed = (f'SUMPRODUCT(({_r(ER,"I2:I")}=$A{r})*'
+                 f'((COUNTIF({_r(CS,"A2:A")},{_r(ER,"B2:B")})'
+                 f'+COUNTIF({_r(RF,"A2:A")},{_r(ER,"B2:B")}))>0))')
     ROWS.append([
         f"={src}",
         f'=IF($A{r}="","",IF({invited}<{MIN_GROUP},"Suppressed (n<{MIN_GROUP})",{invited}))',

@@ -18,7 +18,7 @@ import streamlit as st
 
 import config
 import styles
-from email_service import send_admin_alert
+from email_service import send_admin_alert, send_support_request_alert
 from gemini_service import (
     GeminiUnavailableError,
     generate_response,
@@ -197,6 +197,12 @@ def handle_finish_conversation() -> None:
             emp, sector, lang, "yes", summary.get("summary", ""),
             risk_category=summary.get("risk_category", ""),
         )
+        # Alert as well as record. Writing the lead row only meant a request to
+        # speak to a human sat in a spreadsheet nobody was watching — server.py
+        # sent this alert from its callback endpoint, but the Streamlit path
+        # never did, so the scope's "employee requests human support" alert
+        # simply did not fire for the UI actually in use.
+        send_support_request_alert(emp, sector, summary.get("summary", ""))
 
     mark_chat_completed(
         emp,

@@ -49,6 +49,17 @@ import config
 QUEUE_ROWS = 200       # how many follow-up lines the view allows for
 SHEET_ID = 1865243568  # Admin Review
 
+# Ranges are built with INDIRECT so Google cannot rewrite them. A row INSERT
+# above a referenced range silently rewrites B2:B to B3:B and so on — this
+# broke the Executive Report once per registration until it was fixed the same
+# way (see build_exec_report.py). These ranges point at tabs the app appends
+# to rather than inserts into, so they have not drifted yet; this closes the
+# same hole before someone inserts a row by hand.
+def _r(tab: str, a1: str) -> str:
+    """A range immune to row insertion, e.g. _r(CS, "A2:A")."""
+    return f'INDIRECT("{tab}!{a1}")'
+
+
 CS = "'Chat Summaries'"
 RF = "'Risk Flags'"
 
@@ -114,23 +125,23 @@ def queue_formula() -> str:
     """
     flags = (
         f'IFERROR(FILTER('
-        f'{{{RF}!A2:A,'
-        f'IF({RF}!A2:A<>"","Crisis flag",""),'
-        f'IF({RF}!A2:A<>"",LEFT({RF}!B2:B,10),""),'
-        f'{RF}!C2:C,{RF}!F2:F,{RF}!K2:K}},'
-        f'{RF}!A2:A<>""),)'
+        f'{{{_r(RF,"A2:A")},'
+        f'IF({_r(RF,"A2:A")}<>"","Crisis flag",""),'
+        f'IF({_r(RF,"A2:A")}<>"",LEFT({_r(RF,"B2:B")},10),""),'
+        f'{_r(RF,"C2:C")},{_r(RF,"F2:F")},{_r(RF,"K2:K")}}},'
+        f'{_r(RF,"A2:A")}<>""),)'
     )
     summaries = (
         f'IFERROR(FILTER('
-        f'{{{CS}!A2:A,'
-        f'IF({CS}!A2:A<>"","Conversation",""),'
-        f'IF({CS}!A2:A<>"",LEFT({CS}!B2:B,10),""),'
-        f'{CS}!M2:M,{CS}!K2:K,{CS}!N2:N}},'
+        f'{{{_r(CS,"A2:A")},'
+        f'IF({_r(CS,"A2:A")}<>"","Conversation",""),'
+        f'IF({_r(CS,"A2:A")}<>"",LEFT({_r(CS,"B2:B")},10),""),'
+        f'{_r(CS,"M2:M")},{_r(CS,"K2:K")},{_r(CS,"N2:N")}}},'
         # In the queue if the band warrants it OR they asked for a human...
-        f'(ISNUMBER(MATCH({CS}!M2:M,{FOLLOW_UP_BANDS},0))+({CS}!K2:K="Yes"))>0,'
+        f'(ISNUMBER(MATCH({_r(CS,"M2:M")},{FOLLOW_UP_BANDS},0))+({_r(CS,"K2:K")}="Yes"))>0,'
         # ...and not already listed as a flag above. MATCH, not COUNTIF.
-        f'ISNA(MATCH({CS}!A2:A,{RF}!A2:A,0)),'
-        f'{CS}!A2:A<>""),)'
+        f'ISNA(MATCH({_r(CS,"A2:A")},{_r(RF,"A2:A")},0)),'
+        f'{_r(CS,"A2:A")}<>""),)'
     )
     # Each block is included ONLY if its source tab has rows. An empty FILTER
     # still occupies one row inside VSTACK whatever its fallback is — measured:
@@ -138,11 +149,11 @@ def queue_formula() -> str:
     # phantom row rendered as an empty line 6 above the first real entry.
     # CHOOSEROWS/TOCOL tricks all inherit the same problem, so the fix is to
     # not stack an empty block at all.
-    has_flags = f'COUNTA({RF}!A2:A)>0'
+    has_flags = f'COUNTA({_r(RF,"A2:A")})>0'
     has_summaries = (
-        f'SUMPRODUCT(({CS}!A2:A<>"")*'
-        f'((ISNUMBER(MATCH({CS}!M2:M,{FOLLOW_UP_BANDS},0))+({CS}!K2:K="Yes"))>0)*'
-        f'(ISNA(MATCH({CS}!A2:A,{RF}!A2:A,0))))>0'
+        f'SUMPRODUCT(({_r(CS,"A2:A")}<>"")*'
+        f'((ISNUMBER(MATCH({_r(CS,"M2:M")},{FOLLOW_UP_BANDS},0))+({_r(CS,"K2:K")}="Yes"))>0)*'
+        f'(ISNA(MATCH({_r(CS,"A2:A")},{_r(RF,"A2:A")},0))))>0'
     )
     return (
         f'=IFERROR('

@@ -142,10 +142,17 @@ for i in range(SECTOR_ROWS):
     r = SECTOR_START + i
     src = (f'IFERROR(INDEX(SORT(UNIQUE(FILTER({ER}!I2:I,{ER}!I2:I<>""))),{i+1},1),"")')
     invited = f'COUNTIF({ER}!I2:I,$A{r})'
-    # Count registry rows for this sector whose ID also appears in Chat
-    # Summaries. SUMPRODUCT tolerates no matches; FILTER would return #N/A.
+    # Count registry rows for this sector whose ID appears in Chat Summaries
+    # OR Risk Flags. Both tabs, for the same reason the headline participation
+    # figure counts both: a crisis locks the chat before "Finish", so those
+    # people have a Risk Flags row and no summary. Counting summaries alone
+    # reported a sector's completed as 0 while the person was in genuine
+    # crisis — verified live on 24 Aug with two probe employees.
+    #
+    # SUMPRODUCT tolerates no matches; FILTER would return #N/A.
     completed = (f'SUMPRODUCT(({ER}!I2:I=$A{r})*'
-                 f'(COUNTIF({CS}!A2:A,{ER}!B2:B)>0))')
+                 f'((COUNTIF({CS}!A2:A,{ER}!B2:B)'
+                 f'+COUNTIF({RF}!A2:A,{ER}!B2:B))>0))')
     ROWS.append([
         f"={src}",
         f'=IF($A{r}="","",IF({invited}<{MIN_GROUP},"Suppressed (n<{MIN_GROUP})",{invited}))',

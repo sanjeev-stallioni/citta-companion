@@ -102,6 +102,10 @@ def employee_exists(employee_id: str) -> bool | None:
 
     A valid signature alone does not prove an employee exists — it only proves
     the link was minted with our secret. This is what closes that gap.
+
+    Comparison is case-insensitive. A re-cased ID still passes signature
+    verification, so a case-sensitive check here would refuse a genuine
+    employee — the one direction this check must never fail in.
     """
     if not str(employee_id or "").strip():
         return False
@@ -110,7 +114,11 @@ def employee_exists(employee_id: str) -> bool | None:
         spreadsheet = _open_spreadsheet(client)
         worksheet = spreadsheet.worksheet(config.WORKSHEET_REGISTRY)
         # Column B holds Employee ID; col_values is one call, not a full fetch.
-        ids = {str(v).strip() for v in worksheet.col_values(2)[1:] if str(v).strip()}
+        ids = {
+            str(v).strip().casefold()
+            for v in worksheet.col_values(2)[1:]
+            if str(v).strip()
+        }
     except gspread.WorksheetNotFound:
         logger.warning(
             "Registry tab '%s' not found; cannot verify employee IDs.",
@@ -123,7 +131,7 @@ def employee_exists(employee_id: str) -> bool | None:
     except Exception as exc:  # noqa: BLE001
         logger.exception("Registry check failed: %s", exc)
         return None
-    return str(employee_id).strip() in ids
+    return str(employee_id).strip().casefold() in ids
 
 
 def _now() -> str:
@@ -218,11 +226,20 @@ _REGISTRY_COL_LAST_UPDATED = 23
 
 
 def _find_registry_row(worksheet: gspread.Worksheet, employee_id: str) -> int | None:
-    """Return the 1-indexed sheet row for ``employee_id``, or ``None``."""
+    """Return the 1-indexed sheet row for ``employee_id``, or ``None``.
+
+    Row 1 is skipped: it is the header, and its Employee ID cell contains the
+    literal text "Employee ID". Searching from row 1 meant that string matched
+    the header and returned row 1, so a status write would have overwritten the
+    column headings.
+
+    Matching is case-insensitive for the same reason ``employee_exists`` is —
+    IDs are compared, not stored, and a re-cased ID should not silently miss.
+    """
     ids = worksheet.col_values(_REGISTRY_COL_EMPLOYEE_ID)
-    target = str(employee_id).strip()
-    for i, value in enumerate(ids, start=1):
-        if str(value).strip() == target:
+    target = str(employee_id).strip().casefold()
+    for i, value in enumerate(ids[1:], start=2):
+        if str(value).strip().casefold() == target:
             return i
     return None
 

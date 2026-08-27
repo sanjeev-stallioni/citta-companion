@@ -98,8 +98,10 @@ def queue_formula() -> str:
 
     Two stacked blocks:
       1. every Risk Flags row (all of them are escalations by definition)
-      2. Chat Summaries rows at Amber/Red/Crisis OR asking for human support,
-         excluding anyone already listed above so nobody appears twice.
+      2. Chat Summaries rows at Amber/Red/Crisis OR asking for human support.
+
+    One row per EVENT, not per person. Someone flagged at crisis in June and
+    Amber again in August needs following up twice, and appears twice.
 
     Three Sheets traps this formula has to route around, all of which fail
     SILENTLY rather than erroring — the reason it is written this awkwardly:
@@ -137,10 +139,24 @@ def queue_formula() -> str:
         f'IF({_r(CS,"A2:A")}<>"","Conversation",""),'
         f'IF({_r(CS,"A2:A")}<>"",LEFT({_r(CS,"B2:B")},10),""),'
         f'{_r(CS,"M2:M")},{_r(CS,"K2:K")},{_r(CS,"N2:N")}}},'
-        # In the queue if the band warrants it OR they asked for a human...
+        # In the queue if the band warrants it OR they asked for a human.
+        #
+        # There is deliberately NO "and not already flagged" exclusion here.
+        # There was one until 27 Aug 2026, matching the summary's Employee ID
+        # against Risk Flags, and it silently hid every later conversation by
+        # anyone who had ever been flagged. Found when a fresh Amber
+        # conversation by an employee with a crisis flag from two days earlier
+        # never reached the queue: 5 rows qualified, 3 were shown.
+        #
+        # It failed in the worst possible direction. The people most likely to
+        # come back are the ones already in distress, so the rows it hid were
+        # exactly the ones most needing follow-up — and it hid them from the
+        # duty-of-care queue, without an error, looking complete.
+        #
+        # A crisis locks the chat before "Finish", so a flag and a summary
+        # almost never describe the same event (verified: zero summaries carry
+        # risk=Crisis). One person legitimately appears once per EVENT.
         f'(ISNUMBER(MATCH({_r(CS,"M2:M")},{FOLLOW_UP_BANDS},0))+({_r(CS,"K2:K")}="Yes"))>0,'
-        # ...and not already listed as a flag above. MATCH, not COUNTIF.
-        f'ISNA(MATCH({_r(CS,"A2:A")},{_r(RF,"A2:A")},0)),'
         f'{_r(CS,"A2:A")}<>""),)'
     )
     # Each block is included ONLY if its source tab has rows. An empty FILTER
@@ -152,8 +168,7 @@ def queue_formula() -> str:
     has_flags = f'COUNTA({_r(RF,"A2:A")})>0'
     has_summaries = (
         f'SUMPRODUCT(({_r(CS,"A2:A")}<>"")*'
-        f'((ISNUMBER(MATCH({_r(CS,"M2:M")},{FOLLOW_UP_BANDS},0))+({_r(CS,"K2:K")}="Yes"))>0)*'
-        f'(ISNA(MATCH({_r(CS,"A2:A")},{_r(RF,"A2:A")},0))))>0'
+        f'((ISNUMBER(MATCH({_r(CS,"M2:M")},{FOLLOW_UP_BANDS},0))+({_r(CS,"K2:K")}="Yes"))>0))>0'
     )
     return (
         f'=IFERROR('

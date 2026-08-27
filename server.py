@@ -21,13 +21,18 @@ from flask import Flask, jsonify, render_template, request
 
 import config
 import link_tokens
-from email_service import send_admin_alert, send_support_request_alert
+from email_service import (
+    send_admin_alert,
+    send_opt_in_alert,
+    send_support_request_alert,
+)
 from gemini_service import (
     GeminiUnavailableError,
     generate_response,
     initialize_model,
 )
 from google_sheets import (
+    contact_opt_in,
     employee_exists,
     mark_chat_completed,
     mark_chat_started,
@@ -44,7 +49,12 @@ from prompts import (
     get_welcome_copy,
     get_welcome_message,
 )
-from risk_detection import RISK_CRISIS, detect_risk, matched_keywords
+from risk_detection import (
+    ALERT_RISK_LEVELS,
+    RISK_CRISIS,
+    detect_risk,
+    matched_keywords,
+)
 from summary_generator import generate_summary
 from transcript_service import save_transcript
 from utils import language_label, risk_label
@@ -147,6 +157,7 @@ def api_chat():
         alerted = send_admin_alert(
             session["employee_id"], session["sector"], RISK_CRISIS,
             keywords, message,
+            opted_in=contact_opt_in(session["employee_id"]),
         )
         # Archive before the flag, so the flag row carries the link. A crisis
         # conversation never reaches /api/finish, so this is its only archive.
@@ -218,11 +229,44 @@ def api_finish():
     )
     if saved:
         mark_summary_generated(session["employee_id"])
-    if str(summary.get("human_support_requested", "")).lower() == "yes":
+
+    emp, sector, lang = (
+        session["employee_id"], session["sector"], session["lang"]
+    )
+    assessed_risk = str(summary.get("risk_category", "")).strip().lower()
+    requested = str(summary.get("human_support_requested", "")).lower() == "yes"
+    notes = summary.get("summary", "")
+    # One Sheets round-trip, reused by all three branches below.
+    opted_in = contact_opt_in(emp)
+
+    if requested:
         save_support_lead(
-            session["employee_id"], session["sector"], session["lang"],
-            "yes", summary.get("summary", ""),
+            emp, sector, lang, "yes", notes,
             risk_category=summary.get("risk_category", ""),
+        )
+        send_support_request_alert(
+            emp, sector, notes,
+            risk_category=summary.get("risk_category", ""), opted_in=opted_in,
+        )
+    elif opted_in:
+        # Opting in on the registration form is its own scope trigger, separate
+        # from asking during the conversation.
+        save_support_lead(
+            emp, sector, lang, "no", notes,
+            risk_category=summary.get("risk_category", ""),
+        )
+        send_opt_in_alert(
+            emp, sector,
+            risk_category=summary.get("risk_category", ""), notes=notes,
+        )
+
+    # Amber/Red alert. Crisis is excluded — the crisis branch of /api/chat has
+    # already sent one, and a second email for the same conversation would
+    # train people to skim them.
+    if assessed_risk in ALERT_RISK_LEVELS and not session["crisis"]:
+        send_admin_alert(
+            emp, sector, assessed_risk,
+            support_requested=requested, opted_in=opted_in,
         )
 
     mark_chat_completed(

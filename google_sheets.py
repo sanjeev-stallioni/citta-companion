@@ -134,6 +134,59 @@ def employee_exists(employee_id: str) -> bool | None:
     return str(employee_id).strip().casefold() in ids
 
 
+_REGISTRY_COL_CONTACT_OPT_IN = 14   # "Contact Opt-in"
+
+
+def contact_opt_in(employee_id: str) -> bool | None:
+    """Did this employee opt in on the form to be contacted about support?
+
+    Returns ``True``/``False``, or ``None`` when the answer cannot be
+    determined (Sheets unreachable, ID not found, or the cell holds something
+    unrecognised). ``None`` means "unknown", never "no" — the caller must not
+    treat an outage as a refusal of contact.
+
+    The scope makes opt-in a first-class trigger: alerts fire when "the
+    employee opts in to be contacted for further wellbeing support", and the
+    support-leads tab is for people "who have consented OR requested further
+    support". Neither is possible without reading this column.
+
+    Matching is deliberately loose. Google Forms stores the full option text
+    ("Yes, please contact me."), and that wording can be edited in the form at
+    any time without anyone thinking to update this code, so we look for an
+    affirmative rather than compare against a fixed string.
+    """
+    if not str(employee_id or "").strip():
+        return None
+    try:
+        client = _get_client()
+        spreadsheet = _open_spreadsheet(client)
+        worksheet = spreadsheet.worksheet(config.WORKSHEET_REGISTRY)
+        row = _find_registry_row(worksheet, employee_id)
+        if row is None:
+            return None
+        value = str(worksheet.cell(row, _REGISTRY_COL_CONTACT_OPT_IN).value or "")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Opt-in lookup failed for %s: %s", employee_id, exc)
+        return None
+
+    text = value.strip().lower()
+    if not text:
+        return False
+    if text.startswith("yes") or "please contact me" in text:
+        return True
+    if text.startswith("no") or "do not" in text or "don't" in text:
+        return False
+    # Anything else is not an opt-in answer. This currently includes the
+    # consent paragraph, which the Make scenario writes into this column by
+    # mistake (it maps the form's "Consent" field instead of the opt-in one).
+    # Reporting "unknown" rather than guessing keeps the mis-mapping visible.
+    logger.warning(
+        "Contact Opt-in for %s holds an unrecognised value (%.40s...) — "
+        "check the Make scenario's column mapping.", employee_id, value,
+    )
+    return None
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -189,8 +242,38 @@ def _get_worksheet(spreadsheet: gspread.Spreadsheet, title: str) -> gspread.Work
         return worksheet
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _defuse(value):
+    """Stop free text being stored as a live spreadsheet formula.
+
+    Rows are written with ``USER_ENTERED`` so that transcript URLs arrive as
+    clickable links rather than inert strings. The same setting means any cell
+    whose text begins with ``=``, ``+``, ``-`` or ``@`` is parsed as a formula.
+    Several fields here carry AI-generated text derived from what an employee
+    typed — the summary, coping strategies, notes — so a conversation
+    containing a formula-shaped line lands in the sheet as executable content.
+
+    Verified live before fixing: a summary field of ``=1+1`` was stored and
+    rendered as ``2``. In a sheet Citta's team opens daily, ``=IMPORTXML(...)``
+    would be a data-exfiltration primitive against the one file holding every
+    employee's name, email and risk category.
+
+    A leading apostrophe forces Sheets to treat the cell as text. It is not
+    displayed and does not become part of the value.
+
+    URLs are left alone: they cannot start with these characters, so the
+    hyperlink behaviour we rely on is unaffected.
+    """
+    if isinstance(value, str) and value[:1] in _FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
+
 def _append(worksheet_name: str, row: list) -> bool:
     """Append ``row`` to ``worksheet_name``. Returns success as a boolean."""
+    row = [_defuse(cell) for cell in row]
     try:
         client = _get_client()
         spreadsheet = _open_spreadsheet(client)
@@ -269,7 +352,8 @@ def _update_registry_status(employee_id: str, updates: dict[int, str]) -> bool:
             return False
 
         cells = [
-            gspread.Cell(row, col, value) for col, value in updates.items()
+            gspread.Cell(row, col, _defuse(value))
+            for col, value in updates.items()
         ]
         cells.append(
             gspread.Cell(row, _REGISTRY_COL_LAST_UPDATED, _now())

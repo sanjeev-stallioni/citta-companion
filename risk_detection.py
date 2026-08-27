@@ -79,3 +79,12 @@ def matched_keywords(text: str) -> list[str]:
 def is_crisis(text: str) -> bool:
     """Convenience helper: ``True`` if ``text`` triggers a crisis state."""
     return detect_risk(text) == RISK_CRISIS
+
+
+# Assessed bands that warrant an email alert on their own, per the scope:
+# "alerts when the chatbot flags amber/red/crisis". These are the summary's
+# categories (green/yellow/amber/red/crisis), not the keyword detector's
+# RISK_* constants above — a crisis found by keyword alerts from
+# trigger_crisis instead, so it is deliberately absent here to avoid two
+# emails for one conversation.
+ALERT_RISK_LEVELS = frozenset({"amber", "red"})

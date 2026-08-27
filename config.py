@@ -96,6 +96,10 @@ SMTP_USE_TLS = _get_env("SMTP_USE_TLS", "true").lower() == "true"
 
 EMAIL_FROM = _get_env("EMAIL_FROM", "Citta Companion <no-reply@example.com>")
 ADMIN_ALERT_EMAIL = _get_env("ADMIN_ALERT_EMAIL", "wellbeing-admin@example.com")
+# Tab id of the Admin Review sheet, used to deep-link alerts straight at the
+# follow-up queue. The scope requires every alert to carry "a link to the admin
+# review sheet"; without the gid the link lands on whichever tab was last open.
+ADMIN_REVIEW_GID = _get_env("ADMIN_REVIEW_GID", "1865243568")
 
 # ---------------------------------------------------------------------------
 # Defaults for URL parameters

@@ -18,13 +18,18 @@ import streamlit as st
 
 import config
 import styles
-from email_service import send_admin_alert, send_support_request_alert
+from email_service import (
+    send_admin_alert,
+    send_opt_in_alert,
+    send_support_request_alert,
+)
 from gemini_service import (
     GeminiUnavailableError,
     generate_response,
     initialize_model,
 )
 from google_sheets import (
+    contact_opt_in,
     mark_chat_completed,
     mark_chat_started,
     mark_summary_generated,
@@ -41,7 +46,12 @@ from prompts import (
     get_welcome_copy,
     get_welcome_message,
 )
-from risk_detection import RISK_CRISIS, detect_risk, matched_keywords
+from risk_detection import (
+    ALERT_RISK_LEVELS,
+    RISK_CRISIS,
+    detect_risk,
+    matched_keywords,
+)
 from summary_generator import generate_summary
 from utils import (
     conversation_status,
@@ -192,9 +202,17 @@ def handle_finish_conversation() -> None:
         )
     else:
         mark_summary_generated(emp)
-    if str(summary.get("human_support_requested", "")).lower() == "yes":
+    assessed_risk = str(summary.get("risk_category", "")).strip().lower()
+    requested = str(summary.get("human_support_requested", "")).lower() == "yes"
+    notes = summary.get("summary", "")
+
+    # Read once and reuse: this is a Sheets round-trip, and the three branches
+    # below would otherwise each make their own.
+    opted_in = contact_opt_in(emp)
+
+    if requested:
         save_support_lead(
-            emp, sector, lang, "yes", summary.get("summary", ""),
+            emp, sector, lang, "yes", notes,
             risk_category=summary.get("risk_category", ""),
         )
         # Alert as well as record. Writing the lead row only meant a request to
@@ -202,7 +220,40 @@ def handle_finish_conversation() -> None:
         # sent this alert from its callback endpoint, but the Streamlit path
         # never did, so the scope's "employee requests human support" alert
         # simply did not fire for the UI actually in use.
-        send_support_request_alert(emp, sector, summary.get("summary", ""))
+        send_support_request_alert(
+            emp, sector, notes,
+            risk_category=summary.get("risk_category", ""), opted_in=opted_in,
+        )
+    elif opted_in:
+        # Opting in on the form is its own trigger in the scope, separate from
+        # asking during the conversation. Someone who ticked the box and never
+        # raised it in chat was previously never followed up at all: no lead
+        # row, no alert. The scope's support-leads tab is explicitly for people
+        # "who have consented OR requested further support".
+        save_support_lead(
+            emp, sector, lang, "no", notes,
+            risk_category=summary.get("risk_category", ""),
+        )
+        send_opt_in_alert(
+            emp, sector,
+            risk_category=summary.get("risk_category", ""), notes=notes,
+        )
+
+    # Amber and Red raise an alert of their own.
+    #
+    # The scope asks for an alert when "the chatbot flags amber/red/crisis".
+    # Only crisis did. A conversation assessed Red — severe distress, or being
+    # unable to function — produced a spreadsheet row and no notification to
+    # anybody, unless the person happened also to ask for human support. It sat
+    # unread until someone opened the sheet.
+    #
+    # Crisis is excluded here because trigger_crisis has already alerted; a
+    # second email for the same conversation would train people to skim them.
+    if assessed_risk in ALERT_RISK_LEVELS and not st.session_state.crisis_triggered:
+        send_admin_alert(
+            emp, sector, assessed_risk,
+            support_requested=requested, opted_in=opted_in,
+        )
 
     mark_chat_completed(
         emp,
@@ -223,7 +274,10 @@ def trigger_crisis(trigger_message: str) -> None:
 
     # Alert first: the sheet records whether the admin was actually reached, and
     # the alert is the fastest path to a human. Nothing below may delay it.
-    alerted = send_admin_alert(emp, sector, RISK_CRISIS, keywords, trigger_message)
+    alerted = send_admin_alert(
+        emp, sector, RISK_CRISIS, keywords, trigger_message,
+        opted_in=contact_opt_in(emp),
+    )
 
     # Archive before writing the flag, so the flag row can carry the link.
     #

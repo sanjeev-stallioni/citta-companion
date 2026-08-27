@@ -371,12 +371,27 @@ EMAIL_FROM=Citta Companion <you@yourdomain.com>
 ADMIN_ALERT_EMAIL=who-gets-risk-alerts@your-real-domain.com
 ```
 
-Three alerts are sent: a **crisis/risk** alert from `trigger_crisis`, a
-**human-support** alert when a finished conversation reports
-`human_support_requested = yes`, and a **callback** alert from the Flask
-callback endpoint. The human-support alert was wired into `server.py` only for a
-time, so the Streamlit path recorded the lead and told nobody — worth checking
-both entry points when adding a fourth.
+Four alert triggers, matching the scope's list:
+
+| Trigger | When |
+|---|---|
+| Crisis | a keyword match, from `trigger_crisis` |
+| **Amber / Red** | the summary's assessed band, on Finish |
+| Human support requested | the summary reports `human_support_requested = yes` |
+| **Contact opt-in** | the employee ticked the opt-in box on the registration form |
+
+A keyword crisis does **not** also send an Amber/Red alert — `trigger_crisis`
+has already sent one, and two emails for one conversation trains people to skim
+them. `ALERT_RISK_LEVELS` in `risk_detection.py` holds the bands that alert.
+
+Every alert carries the six fields the scope requires: Employee ID, risk
+category, whether support was requested, whether the person opted in, a
+timestamp, and a deep link to the Admin Review tab. An unknown opt-in renders as
+`unknown`, never `No` — a Sheets outage must not read as a refusal of contact.
+
+> Alerts were wired into `server.py` only for a time, so the Streamlit path
+> recorded the lead and told nobody. When adding a fifth trigger, wire **both**
+> entry points.
 
 > An `@example.com` recipient is **refused outright**. That domain is reserved
 > and silently discards mail, so SMTP would report success, the send would

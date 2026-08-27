@@ -19,9 +19,15 @@ personal responses private from employers.
 - 📄 **Transcript archiving** — every conversation is saved as a PDF in Citta's
   Drive, with the link recorded on the summary row. Non-English conversations
   carry a machine English translation beneath each message.
-- 📧 **Email alerts** — admin notifications on risk events and callback requests.
+- 📧 **Email alerts** — admin notifications on risk events, human-support
+  requests and callback requests.
+- 🔐 **Registry check** — a valid signature proves a link was minted with our
+  secret, not that the employee exists. With `REQUIRE_REGISTERED_ID` on, an ID
+  absent from the registry is refused, and deleting a row revokes access.
 - 📈 **Executive Report** — a de-identified aggregate tab for the employer, built
   by `tools/build_exec_report.py`.
+- 🗒️ **Admin Review** — Citta's internal follow-up queue, built by
+  `tools/build_admin_review.py`.
 - 🌐 **Seven languages** — en, hi, kn, ta, te, mr, bn. The interface, the welcome
   message and the quick-reply chips are all localised, not just the AI's replies.
 
@@ -49,7 +55,9 @@ citta-companion/
 ├── email_service.py      # Admin alerts
 ├── utils.py              # Query params, session state, helpers
 ├── tools/
-│   └── build_exec_report.py   # Rebuilds the Executive Report tab
+│   ├── build_exec_report.py    # Rebuilds the Executive Report tab
+│   ├── build_admin_review.py   # Rebuilds the Admin Review follow-up queue
+│   └── protect_sheets.py       # Guards generated cells against accidental edits
 ├── static/               # favicon + logo mark (served by Flask)
 ├── assets/               # logo images used by the Streamlit UI
 ├── .streamlit/config.toml
@@ -197,7 +205,16 @@ The key is read only from the environment — it is **never hardcoded**.
    WORKSHEET_SUMMARIES=Chat Summaries
    WORKSHEET_RISK_FLAGS=Risk Flags
    WORKSHEET_SUPPORT_LEADS=Support Leads
+   WORKSHEET_REGISTRY=Employee Registry
+   REQUIRE_REGISTERED_ID=true     # refuse links for IDs not in the registry
    ```
+
+`REQUIRE_REGISTERED_ID` **fails open**: if Sheets cannot be reached the chat
+proceeds, because turning away someone reaching out about their mental health is
+the worse failure, and the signature has already proved the link is genuine. Note
+an **empty registry refuses every link** — register through the form first, then
+enable the flag. Lookups are cached for 5 minutes, so a revocation takes up to
+that long to take effect.
 
 Worksheets and their headers are created automatically on first write — which
 means **a typo in a worksheet name produces a second, empty tab rather than an
@@ -206,6 +223,18 @@ error**. The names must match the spreadsheet exactly.
 Column order in `google_sheets.py` mirrors the live spreadsheet, and rows are
 appended positionally. Reordering a column in the sheet without updating
 `_HEADERS` will silently write every value one column out of place.
+
+### Employee Registry status columns
+
+The registry is owned by the Make scenario — this app never appends to it. It
+does **update** existing rows in place, matching on Employee ID:
+`Chat Started`, `Chat Completed`, `Risk Category`, `Human Support Requested`,
+`Summary Generated` and `Last Updated`.
+
+`mark_chat_completed` also fires on a **crisis**, which never reaches Finish;
+without it the most urgent conversation would be the one left looking abandoned.
+An ID that is not in the registry is skipped rather than inserted, so a stray
+test chat cannot create a row here.
 
 ---
 
@@ -257,16 +286,69 @@ Safe to re-run — it clears the tab and rewrites it, and holds no typed-in data
 Every figure is a live formula over the other tabs, so nothing goes stale and no
 individual response is ever copied across.
 
-Two design rules worth knowing before editing it:
+Three design rules worth knowing before editing it:
 
-- **Participants are counted as distinct Employee IDs**, not rows. Someone who
-  chats twice must not count as two people, or the risk distribution skews
-  toward whoever engaged most.
+- **Participants are counted as distinct *registered* Employee IDs**, not rows.
+  Someone who chats twice must not count as two people, or the risk distribution
+  skews toward whoever engaged most. Every count walks the registry and asks
+  whether that person appears in the data tabs, never the reverse — an ID absent
+  from the registry once pushed participation past 100%. Such rows surface in
+  *Conversations from unregistered IDs*, which should read 0.
 - **Sector groups below `MIN_GROUP` (5) are suppressed.** The scope requires
   sector participation *"where anonymity is protected"*; in a three-person
   department, one Amber count identifies someone.
+- **Ranges are built with `INDIRECT`.** Make inserts each registration as a row
+  insert, and Sheets rewrites any formula pointing below it — `B2:B` silently
+  became `B3:B`, drifting one row per registration until the report read past
+  its own data. `INDIRECT` takes a string, so there is nothing for Sheets to
+  adjust. Do not "simplify" these back to plain ranges.
 
 See `EXECUTIVE_REPORT.md` in the project root for the full rationale.
+
+---
+
+## 🗒️ Admin Review
+
+Citta's internal follow-up queue — everyone who needs contacting, in one place.
+
+```bash
+python3 tools/build_admin_review.py
+```
+
+Columns A–F are live formulas over **both** `Risk Flags` and `Chat Summaries`.
+Both matter: a crisis locks the chat before Finish and leaves no summary, while
+someone who calmly asks for support leaves no flag — reading either tab alone
+drops half the queue. Columns G–J (`Assigned To`, `Contacted On`, `Outcome`,
+`Internal Notes`) are typed in by Citta's team.
+
+> A rebuild does **not** preserve G–J. Anything that must survive belongs in
+> `Risk Flags` H–J.
+
+The words that triggered a flag are never shown here — they go to the alert
+email only.
+
+---
+
+## 🛡️ Sheet protection
+
+```bash
+python3 tools/protect_sheets.py            # warn-on-edit (default)
+python3 tools/protect_sheets.py --strict   # block outright
+python3 tools/protect_sheets.py --remove   # lift
+```
+
+Guards the Executive Report, the Admin Review headings and formula columns, and
+the header row of every data tab. Data rows and Admin Review G–J stay editable.
+
+Defaults to a warning rather than a hard lock because **Google never binds a
+file's owner to a protection** — strict mode was applied, verified through the
+API, and still left every cell editable when the sheet was opened as its owner.
+A warning does interrupt the owner, which is the realistic risk: clicking a
+formula cell and typing over it. `--strict` is worth applying once the sheet is
+shared with Citta's wider team, where it will actually bind.
+
+Re-running replaces only the protections this script created (tagged `[auto]`);
+anything added by hand in the UI is left alone.
 
 ---
 
@@ -286,8 +368,23 @@ SMTP_USERNAME=you@yourdomain.com
 SMTP_PASSWORD=your16charapppassword   # spaces removed
 SMTP_USE_TLS=true
 EMAIL_FROM=Citta Companion <you@yourdomain.com>
-ADMIN_ALERT_EMAIL=who-gets-risk-alerts@example.com
+ADMIN_ALERT_EMAIL=who-gets-risk-alerts@your-real-domain.com
 ```
+
+Three alerts are sent: a **crisis/risk** alert from `trigger_crisis`, a
+**human-support** alert when a finished conversation reports
+`human_support_requested = yes`, and a **callback** alert from the Flask
+callback endpoint. The human-support alert was wired into `server.py` only for a
+time, so the Streamlit path recorded the lead and told nobody — worth checking
+both entry points when adding a fourth.
+
+> An `@example.com` recipient is **refused outright**. That domain is reserved
+> and silently discards mail, so SMTP would report success, the send would
+> return `True`, and `Risk Flags` would record `Admin Email Sent: Yes` for an
+> alert nobody received — invisible exactly where it matters most.
+
+**The deployed app reads `ADMIN_ALERT_EMAIL` from Streamlit secrets, not
+`.env`.** Editing `.env` changes nothing for the live app.
 
 ---
 
@@ -306,6 +403,8 @@ ADMIN_ALERT_EMAIL=who-gets-risk-alerts@example.com
    WORKSHEET_SUMMARIES = "Chat Summaries"
    WORKSHEET_RISK_FLAGS = "Risk Flags"
    WORKSHEET_SUPPORT_LEADS = "Support Leads"
+   WORKSHEET_REGISTRY = "Employee Registry"
+   REQUIRE_REGISTERED_ID = "true"
    GOOGLE_CREDENTIALS_JSON = '''
    {  ...the entire service_account.json contents...  }
    '''
@@ -357,6 +456,22 @@ ADMIN_ALERT_EMAIL=who-gets-risk-alerts@example.com
 - **Invalid links** are refused before any conversation starts.
 - Secrets are kept out of source control via `.gitignore` — `.env` and
   `service_account.json` are both ignored.
+
+---
+
+## 📚 Related documents
+
+These live in the **project root**, one level above this repo:
+
+| File | What it covers |
+|---|---|
+| `EXECUTIVE_REPORT.md` | Why the report is built the way it is, and the silent Sheets bugs found along the way |
+| `FULL_SYSTEM_TEST.md` | The end-to-end test script — 12 scenarios, all passed 25 Aug |
+| `REMAINING_WORK.md` | What is left, what is blocked on the client |
+| `HANDOVER.md` | Custom URL, private repo, transfer to Citta |
+| `MAKE_SCENARIO.md` | The Make.com automation |
+| `SETUP_GUIDE.md` / `SETUP_PROGRESS.md` | Environment setup and what was done when |
+| `TEST_PLAN.md` | The earlier test plan `FULL_SYSTEM_TEST.md` supersedes |
 
 ---
 

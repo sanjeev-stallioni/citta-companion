@@ -224,15 +224,14 @@ ROWS += [
 THEME_BURNOUT_START = len(ROWS) + 1
 ROWS += [["", "", ""] for _ in range(THEME_ROWS)]
 
-ROWS += [
-    ["", "", ""],
-    ["Suggested intervention themes", "", ""],
-    ["Awaiting Citta's programme list and clinical review — not generated, by "
-     "design.", "", ""],
-    ["Suggested next-step packages", "", ""],
-    ["Awaiting Citta's programme list and clinical review — not generated, by "
-     "design.", "", ""],
-]
+# The scope's other two theme rows — suggested intervention themes and
+# suggested next-step packages — are NOT in this sheet. They need Citta's
+# actual programme names and clinical review, and inventing them would be the
+# same failure as the chatbot inventing a helpline number. Placeholder rows
+# saying so were removed at the developer's direction on 27 Aug 2026.
+# Raise the gap with the client at sign-off: the scope's stated purpose for
+# this report ("support future upsell into deeper Citta programmes") rests on
+# the packages row in particular.
 
 _THEME_PROMPT = """You are grouping anonymised workplace wellbeing summaries \
 into themes for a de-identified report shown to an employer.
@@ -346,8 +345,7 @@ BANNERS = [_row_of(t) for t in
             "PARTICIPATION BY SECTOR", "THEMES")]
 # Theme category headings are sub-headings inside the THEMES block, not banners.
 THEME_HEADS = [_row_of(t) for t in
-               ("Top stress themes", "Top burnout / workplace pressure themes",
-                "Suggested intervention themes", "Suggested next-step packages")]
+               ("Top stress themes", "Top burnout / workplace pressure themes")]
 TABLE_HEADS = [_row_of("Metric"), _row_of("Category"), _row_of("Sector")]
 
 ACCENT = {"red": 0.541, "green": 0.392, "blue": 0.125}   # the app's bronze
@@ -467,12 +465,6 @@ def formatting_requests():
         reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {
             "backgroundColor": SOFT, "textFormat": {"bold": True}}},
             "userEnteredFormat(backgroundColor,textFormat)"))
-    # The two "awaiting Citta's programme list" lines read as notes, not data.
-    for label in ("Suggested intervention themes", "Suggested next-step packages"):
-        r = _row_of(label) + 1
-        reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {"textFormat": {
-            "italic": True, "fontSize": 9, "foregroundColor": MUTED}}},
-            "userEnteredFormat.textFormat"))
     # Theme counts are figures: right-align them like every other count.
     for start in (THEME_STRESS_START, THEME_BURNOUT_START):
         reqs.append(_fmt(start - 1, start - 1 + THEME_ROWS, {"userEnteredFormat": {

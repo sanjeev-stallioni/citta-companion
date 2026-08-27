@@ -23,7 +23,9 @@ Reads credentials the same way the app does, so it needs `service_account.json`
 (or `GOOGLE_CREDENTIALS_JSON`) and must be run from the `citta-companion`
 directory.
 """
+import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -180,12 +182,155 @@ for i in range(SECTOR_ROWS):
         f'=IF($A{r}="","",IF({invited}<{MIN_GROUP},"Suppressed (n<{MIN_GROUP})",{completed}))',
     ])
 
-# No THEMES section. The scope lists four theme items for this sheet (top
-# stress themes, top burnout/pressure themes, suggested interventions,
-# next-step packages); they were removed at the developer's direction on
-# 4 Aug 2026, before ever being committed — there is no version of this file
-# with theme generation in git. Raise with the client at sign-off before
-# calling the report done; it would need rebuilding from scratch.
+# --- THEMES ---------------------------------------------------------------
+#
+# The scope asks this sheet for four theme rows. Two are generated here from
+# the conversation summaries (top stress themes, top burnout/workplace pressure
+# themes). The other two — suggested intervention themes and suggested
+# next-step packages — are deliberately left as placeholders: they require
+# Citta's actual programme names and clinical review, and inventing them would
+# be the same failure as the chatbot inventing a helpline number.
+#
+# Themes are the ONLY part of this tab that is generated text rather than a
+# live formula, which makes them the only part that can carry words across from
+# a conversation. Three rules keep that safe, enforced in _generate_themes:
+#
+#   * only whole themes are written, never a quote or a phrase from a summary
+#   * a theme must appear in at least MIN_THEME_PEOPLE distinct people's
+#     conversations, so a theme can never describe one identifiable person
+#   * the model is instructed to return short generic labels, and anything
+#     resembling a name, place or job title is rejected before writing
+#
+# Because they are values, they do NOT update themselves. Re-run this script to
+# refresh them; the row says when they were last generated so a stale section
+# is visible rather than assumed current.
+THEME_ROWS = 5            # theme lines shown per category
+MIN_THEME_PEOPLE = 3      # a theme must span at least this many people
+
+ROWS += [
+    ["", "", ""],
+    ["THEMES", "", ""],
+    ["Generated from conversation summaries. Themes are aggregated across "
+     f"employees and only shown where at least {MIN_THEME_PEOPLE} people raised "
+     "them; no individual response is reproduced.", "", ""],
+    ["Top stress themes", "", "Employees"],
+]
+THEME_STRESS_START = len(ROWS) + 1
+ROWS += [["", "", ""] for _ in range(THEME_ROWS)]
+
+ROWS += [
+    ["Top burnout / workplace pressure themes", "", "Employees"],
+]
+THEME_BURNOUT_START = len(ROWS) + 1
+ROWS += [["", "", ""] for _ in range(THEME_ROWS)]
+
+ROWS += [
+    ["", "", ""],
+    ["Suggested intervention themes", "", ""],
+    ["Awaiting Citta's programme list and clinical review — not generated, by "
+     "design.", "", ""],
+    ["Suggested next-step packages", "", ""],
+    ["Awaiting Citta's programme list and clinical review — not generated, by "
+     "design.", "", ""],
+]
+
+_THEME_PROMPT = """You are grouping anonymised workplace wellbeing summaries \
+into themes for a de-identified report shown to an employer.
+
+Return JSON only, no prose:
+{{"themes": [{{"theme": "<3-5 word label>", "people": <integer>}}]}}
+
+Rules, all mandatory:
+- Return at most {limit} themes, ordered by how many people raised them.
+- "people" is how many of the numbered entries below mention that theme. Count
+  each entry once. Never exceed {total}.
+- A theme label must be GENERIC and reusable — "Understaffing and cover",
+  "Poor sleep from work worry", "Unclear priorities". Describe the pattern.
+- NEVER include a name, place, job title, team name, product, or any phrase
+  copied from an entry. NEVER quote. If a theme cannot be described without
+  those, omit it entirely.
+- Omit any theme raised by fewer than {min_people} entries.
+- If nothing meets the bar, return {{"themes": []}}.
+
+Focus specifically on: {focus}
+
+Entries:
+{entries}"""
+
+# Fields fed to each theme category. Only these are sent — the AI Summary
+# narrative is deliberately excluded: it is the most person-shaped text in the
+# row and adds nothing a themed label needs.
+_THEME_FIELDS = {
+    "stress": (3, 5, 7, 9),        # stress, sleep, manager/team, emotional
+    "burnout": (4, 6, 8),          # burnout, workplace pressure, coping
+}
+
+# A generated theme containing any of these is dropped unread. Cheap belt to
+# the prompt's braces: a model that ignores "never name anyone" fails closed.
+_THEME_BANNED = re.compile(
+    r"\b(mr|mrs|ms|dr|sir|madam)\b|[A-Z][a-z]+\s+(?:Ltd|Limited|Inc|LLC|Pvt)"
+    r"|\b(?:CITTA-EMP\d+)\b|@|\bhttps?://",
+    re.IGNORECASE,
+)
+
+
+def _theme_entries(rows, columns):
+    """Build the numbered, de-identified entries the model sees."""
+    entries = []
+    for row in rows:
+        parts = [
+            str(row[c]).strip() for c in columns
+            if c < len(row) and str(row[c]).strip()
+            and str(row[c]).strip().lower() not in ("unclear", "n/a", "none")
+        ]
+        if parts:
+            entries.append("; ".join(parts))
+    return entries
+
+
+def _generate_themes(entries, focus, limit, total):
+    """Ask Gemini to group ``entries`` into themes. Returns [(theme, count)].
+
+    Fails soft and returns [] on any problem — a missing themes section is a
+    visibly empty row, whereas a wrong one is an employer acting on a pattern
+    that was never in the data.
+    """
+    if len(entries) < MIN_THEME_PEOPLE:
+        return []
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+        prompt = _THEME_PROMPT.format(
+            limit=limit, total=total, min_people=MIN_THEME_PEOPLE, focus=focus,
+            entries="\n".join(f"{i+1}. {e}" for i, e in enumerate(entries)),
+        )
+        raw = model.generate_content(
+            prompt,
+            generation_config={"response_mime_type": "application/json"},
+        ).text
+        data = json.loads(raw)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  themes ({focus[:24]}...): generation failed — {exc}")
+        return []
+
+    out = []
+    for item in (data.get("themes") or []):
+        label = str(item.get("theme", "")).strip()
+        try:
+            count = int(item.get("people", 0))
+        except (TypeError, ValueError):
+            continue
+        if not label or _THEME_BANNED.search(label):
+            continue
+        # Suppression, applied here rather than trusted to the model: a theme
+        # spanning fewer than MIN_THEME_PEOPLE could describe one person, which
+        # is exactly what the scope's "anonymity is protected" forbids.
+        if count < MIN_THEME_PEOPLE or count > total:
+            continue
+        out.append((label[:60], count))
+    return out[:limit]
+
 
 # Row numbers the formatter needs. Derived, not hardcoded, so inserting a
 # metric above them doesn't silently paint the wrong rows.
@@ -198,7 +343,11 @@ def _row_of(label):
 
 BANNERS = [_row_of(t) for t in
            ("PARTICIPATION", "RISK CATEGORY DISTRIBUTION", "HUMAN SUPPORT",
-            "PARTICIPATION BY SECTOR")]
+            "PARTICIPATION BY SECTOR", "THEMES")]
+# Theme category headings are sub-headings inside the THEMES block, not banners.
+THEME_HEADS = [_row_of(t) for t in
+               ("Top stress themes", "Top burnout / workplace pressure themes",
+                "Suggested intervention themes", "Suggested next-step packages")]
 TABLE_HEADS = [_row_of("Metric"), _row_of("Category"), _row_of("Sector")]
 
 ACCENT = {"red": 0.541, "green": 0.392, "blue": 0.125}   # the app's bronze
@@ -312,6 +461,26 @@ def formatting_requests():
             "bold": True, "foregroundColor": colour}}},
             "userEnteredFormat.textFormat", 0, 1))
 
+    # Theme sub-headings: bold, but not the full bronze banner treatment —
+    # they sit inside the THEMES block rather than starting a new section.
+    for r in THEME_HEADS:
+        reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {
+            "backgroundColor": SOFT, "textFormat": {"bold": True}}},
+            "userEnteredFormat(backgroundColor,textFormat)"))
+    # The two "awaiting Citta's programme list" lines read as notes, not data.
+    for label in ("Suggested intervention themes", "Suggested next-step packages"):
+        r = _row_of(label) + 1
+        reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {"textFormat": {
+            "italic": True, "fontSize": 9, "foregroundColor": MUTED}}},
+            "userEnteredFormat.textFormat"))
+    # Theme counts are figures: right-align them like every other count.
+    for start in (THEME_STRESS_START, THEME_BURNOUT_START):
+        reqs.append(_fmt(start - 1, start - 1 + THEME_ROWS, {"userEnteredFormat": {
+            "horizontalAlignment": "RIGHT",
+            "textFormat": {"fontSize": 10, "foregroundColor": {
+                "red": 0.14, "green": 0.12, "blue": 0.09}}}},
+            "userEnteredFormat(horizontalAlignment,textFormat)", 2, 3))
+
     # The denominator every rate divides by — worth finding at a glance.
     r = _row_of("Employees who had a conversation")
     reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {
@@ -326,11 +495,64 @@ def formatting_requests():
     return reqs
 
 
+def _fill_themes(svc):
+    """Generate the two AI theme blocks and write them into ROWS in place.
+
+    Runs before the sheet is written so a generation failure leaves visibly
+    empty theme rows rather than a half-updated tab.
+    """
+    result = svc.values().get(
+        spreadsheetId=config.GOOGLE_SHEET_KEY,
+        range="'Chat Summaries'!A2:N",
+    ).execute()
+    summaries = [r for r in (result.get("values") or []) if r and r[0].strip()]
+
+    # De-duplicate by Employee ID, keeping the most recent conversation.
+    # Someone who chats three times must not make their own concerns look like
+    # three people's — the same reason participants are counted as people.
+    by_person = {}
+    for row in summaries:
+        by_person[row[0].strip()] = row
+    people = list(by_person.values())
+    total = len(people)
+
+    if total < MIN_THEME_PEOPLE:
+        print(f"  themes: skipped — {total} people, need {MIN_THEME_PEOPLE}")
+        return
+
+    for start, key, focus in (
+        (THEME_STRESS_START, "stress",
+         "stress, sleep, manager or team pressure, and emotional strain"),
+        (THEME_BURNOUT_START, "burnout",
+         "burnout, workload and workplace pressure, and how people cope"),
+    ):
+        entries = _theme_entries(people, _THEME_FIELDS[key])
+        themes = _generate_themes(entries, focus, THEME_ROWS, total)
+        for i in range(THEME_ROWS):
+            row = ROWS[start - 1 + i]
+            if i < len(themes):
+                label, count = themes[i]
+                row[0], row[1], row[2] = f"   {label}", "", count
+            elif i == 0:
+                # An empty block must explain itself. Blank rows read as a
+                # broken report; this reads as the suppression rule working,
+                # which is what it is.
+                row[0] = (f"   No theme yet reaches {MIN_THEME_PEOPLE} people "
+                          f"— {total} conversation{'s' if total != 1 else ''} "
+                          f"so far")
+                row[1], row[2] = "", ""
+            else:
+                row[0], row[1], row[2] = "", "", ""
+        print(f"  themes ({key}): {len(themes)} written from {total} people")
+
+
 def main():
     creds = Credentials.from_service_account_file(
         config.GOOGLE_CREDENTIALS_FILE,
         scopes=["https://www.googleapis.com/auth/spreadsheets"])
     svc = build("sheets", "v4", credentials=creds).spreadsheets()
+
+    _fill_themes(svc)
 
     svc.values().clear(spreadsheetId=config.GOOGLE_SHEET_KEY,
                        range="'Executive Report'!A1:Z200", body={}).execute()

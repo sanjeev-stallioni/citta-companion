@@ -260,12 +260,19 @@ EXTRA_THEMES = [
     ("Top manager and team themes", "Q",
      [("Manager unsupportive", "unsupportive"), ("Manager support mixed", "mixed"),
       ("Manager supportive", "supportive")]),
-    ("Top workplace conflict themes", "R",
-     [("Significant conflict", "significant"), ("Some conflict", "some"),
-      ("No conflict reported", "none")]),
-    ("Coping themes", "S",
+    # Column order follows _HEADERS in google_sheets.py: O Sleep Quality,
+    # P Pressure Level, Q Manager Support, R Coping Level, S Conflict Level.
+    # These two were transposed on first write — conflict read column R and
+    # counted "significant" against Coping Level, where that word never
+    # appears, so the band read 0 and rendered as a dash. Indistinguishable
+    # from correct suppression, and caught only by comparing a raw COUNTIF
+    # against what the report displayed.
+    ("Coping themes", "R",
      [("No coping strategies", "none"), ("Limited coping", "limited"),
       ("Healthy coping", "healthy")]),
+    ("Top workplace conflict themes", "S",
+     [("Significant conflict", "significant"), ("Some conflict", "some"),
+      ("No conflict reported", "none")]),
 ]
 
 

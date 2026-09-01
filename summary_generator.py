@@ -27,6 +27,15 @@ SUMMARY_FIELDS = [
     "coping_strategy",
     "emotional_regulation",
     "human_support_requested",
+    # Graded counterparts to the free-text fields above. The prose is what
+    # Citta's intake team reads; these are what the employer's report counts.
+    # Kept separate rather than replacing the prose: "waking at 3am from work
+    # anxiety" is worth far more to a clinician than "poor".
+    "sleep_quality",
+    "pressure_level",
+    "manager_support",
+    "coping_level",
+    "conflict_level",
     "risk_category",
     "summary",
     "recommendation",
@@ -109,12 +118,40 @@ def _apply_risk_floor(summary: dict) -> dict:
     return summary
 
 
+# The graded fields, and the only values each may hold.
+#
+# These are COUNTED by formula on the employer's report, so an off-vocabulary
+# value is worse than a missing one: "quite poor" matches no COUNTIF, the theme
+# silently reads low, and nothing errors. The model is told the lists in the
+# prompt; this enforces them, because a prompt is a request and this is a
+# guarantee. Anything unrecognised becomes "unclear", which the report ignores.
+GRADED_FIELDS = {
+    "sleep_quality": {"good", "fair", "poor", "unclear"},
+    "pressure_level": {"low", "moderate", "high", "unclear"},
+    "manager_support": {"supportive", "mixed", "unsupportive", "unclear"},
+    "coping_level": {"healthy", "limited", "none", "unclear"},
+    "conflict_level": {"none", "some", "significant", "unclear"},
+}
+
+
 def _normalize(data: dict, risk_category: str) -> dict:
     """Ensure every expected field exists and values are strings."""
     summary = _empty_summary(risk_category)
     for field in SUMMARY_FIELDS:
         if field in data and data[field] not in (None, ""):
             summary[field] = str(data[field]).strip()
+
+    # Graded fields are lowercased and checked against their vocabulary.
+    for field, allowed in GRADED_FIELDS.items():
+        value = str(summary.get(field, "")).strip().lower()
+        if value not in allowed:
+            if value not in ("", "unclear"):
+                logger.warning(
+                    "Summary field %s returned %r, which is not one of %s — "
+                    "recorded as unclear", field, value, sorted(allowed),
+                )
+            value = "unclear"
+        summary[field] = value
 
     summary["risk_category"] = str(summary.get("risk_category", "")).strip().lower()
     summary = _apply_risk_floor(summary)

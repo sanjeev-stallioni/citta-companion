@@ -46,6 +46,17 @@ _HEADERS = {
         "AI Summary",
         "Risk Category",
         "Transcript Link",
+        # Graded fields, APPENDED not inserted (columns O-S).
+        #
+        # Inserting them beside their free-text partners would read better, but
+        # every existing row's data would shift one column right and every
+        # report formula would silently point at the wrong column. Appending is
+        # uglier and safe.
+        "Sleep Quality",
+        "Pressure Level",
+        "Manager Support",
+        "Coping Level",
+        "Conflict Level",
     ],
     config.WORKSHEET_RISK_FLAGS: [
         "Employee ID",
@@ -446,6 +457,11 @@ def save_chat_summary(
         summary.get("summary", ""),
         _titled(summary.get("risk_category", "")),
         transcript_url,
+        summary.get("sleep_quality", ""),
+        summary.get("pressure_level", ""),
+        summary.get("manager_support", ""),
+        summary.get("coping_level", ""),
+        summary.get("conflict_level", ""),
     ]
     return _append(config.WORKSHEET_SUMMARIES, row)
 

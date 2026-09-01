@@ -240,6 +240,34 @@ BURNOUT_BANDS = [("Severe burnout", "severe"),
                  ("Mild burnout", "mild"),
                  ("No burnout reported", "none")]
 
+# The five themes added Sep 2026, counted from the graded columns O-S written
+# at the end of every conversation. Same mechanism as stress and burnout: a
+# closed vocabulary the chatbot fills in, counted by formula, never generated.
+#
+# Each entry is (heading, column, bands worst-first). Worst-first matters —
+# band() excludes anyone who also reported a band above, so a person is counted
+# once, in their most severe band.
+#
+# "unclear" is deliberately never a band. It is the model declining to
+# classify, not a finding about anyone, and showing it would invite the
+# employer to read meaning into a non-answer.
+EXTRA_THEMES = [
+    ("Top sleep and fatigue themes", "O",
+     [("Poor sleep", "poor"), ("Fair sleep", "fair"), ("Good sleep", "good")]),
+    ("Top workplace pressure themes", "P",
+     [("High pressure", "high"), ("Moderate pressure", "moderate"),
+      ("Low pressure", "low")]),
+    ("Top manager and team themes", "Q",
+     [("Manager unsupportive", "unsupportive"), ("Manager support mixed", "mixed"),
+      ("Manager supportive", "supportive")]),
+    ("Top workplace conflict themes", "R",
+     [("Significant conflict", "significant"), ("Some conflict", "some"),
+      ("No conflict reported", "none")]),
+    ("Coping themes", "S",
+     [("No coping strategies", "none"), ("Limited coping", "limited"),
+      ("Healthy coping", "healthy")]),
+]
+
 
 def band(col: str, value: str, higher: list) -> str:
     """Registered people whose HIGHEST severity in ``col`` is ``value``.
@@ -278,11 +306,11 @@ def _band_row(label: str, col: str, value: str, higher: list) -> list:
 ROWS += [
     ["", "", ""],
     ["THEMES", "", ""],
-    ["Counted from the stress and burnout levels recorded at the end of each "
-     "conversation. Each person is counted once, in their most severe band. "
-     "A band with "
-     f"fewer than {MIN_THEME_PEOPLE} people shows \u2014 rather than a count, so "
-     "no band can describe one identifiable person.", "", ""],
+    ["Counted from the wellbeing levels recorded at the end of each "
+     "conversation. Within each theme a person is counted once, in their most "
+     f"severe band. A band with fewer than {MIN_THEME_PEOPLE} people shows "
+     "\u2014 rather than a count, so no band can describe one identifiable "
+     "person.", "", ""],
     ["Top stress themes", "", "Employees"],
 ]
 ROWS += [_band_row(lbl, "D", val, [v for _, v in STRESS_BANDS[:i]])
@@ -293,6 +321,180 @@ ROWS += [
 ]
 ROWS += [_band_row(lbl, "E", val, [v for _, v in BURNOUT_BANDS[:i]])
          for i, (lbl, val) in enumerate(BURNOUT_BANDS)]
+
+# The five themes added Sep 2026. Same shape as the two above.
+for _head, _col, _bands in EXTRA_THEMES:
+    ROWS += [[_head, "", "Employees"]]
+    ROWS += [_band_row(lbl, _col, val, [v for _, v in _bands[:i]])
+             for i, (lbl, val) in enumerate(_bands)]
+
+# Help-seeking is not a severity scale, so it is not a band() call: column K
+# already holds a plain Yes/No written at the end of every conversation. Only
+# the "Yes" line is shown — a "No" count would tell the employer how many of
+# their staff declined support, which is a step toward reading individuals and
+# is no part of what this report is for.
+_HELP = (f'SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
+         f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"K2:K")},"Yes")>0))')
+ROWS += [
+    ["Help-seeking interest", "", "Employees"],
+    ["   Asked to speak with someone", "",
+     f'=IF({_HELP}<{MIN_THEME_PEOPLE},"—",{_HELP})'],
+]
+
+
+def _row_of(label):
+    for i, row in enumerate(ROWS):
+        if row[0] == label:
+            return i
+    raise ValueError(f"row not found: {label}")
+
+
+# --- RECOMMENDATIONS -------------------------------------------------------
+#
+# Sections E and F of the scope: "suggested intervention themes" and "suggested
+# next-step packages or programmes". Unbuilt until now because they need
+# Citta's real programme names and clinical judgement, and inventing either
+# would be the same failure as the chatbot inventing a helpline number.
+#
+# The client resolved this on 1 Sep by scoping them as HYBRID, in their words:
+# "basic data signals + editable recommendation text + final human review by
+# Citta", and explicitly NOT "a clinical recommendation engine". The system
+# must not diagnose, prescribe therapy, or determine individual treatment.
+#
+# So each line is a suggestion the sheet computes and a blank cell Citta fills
+# in. The suggestion is a prompt for a human, never the thing that gets sent.
+#
+# TWO COLUMNS, NOT ONE. The suggestion is a formula in column B; Citta's final
+# wording is typed into column C. Letting someone type over the suggestion
+# would destroy the formula permanently — and the next report for that company
+# would show a blank where a recommendation should be, which looks exactly like
+# "no recommendation needed". Nobody would notice. Separating them removes the
+# failure entirely.
+#
+# Thresholds live in named cells at the top of the block rather than buried in
+# formulas, so Citta can retune them without touching a formula. The client
+# said only "high"; these are defaults to be confirmed.
+THRESH_SHARE = 0.30    # a theme covering this share of participants is "high"
+THRESH_SUPPORT = 0.20  # this share asking for a human triggers the support line
+
+ROWS += [
+    ["", "", ""],
+    ["RECOMMENDED INTERVENTIONS", "", ""],
+    ["Suggested from the figures above. Citta reviews and rewrites every line "
+     "before anything reaches an employer — the suggestions are a starting "
+     "point, not a decision. Nothing here names or describes an individual.",
+     "", ""],
+    ["Threshold: theme share", THRESH_SHARE, "A theme above this share of participants counts as high"],
+    ["Threshold: support share", THRESH_SUPPORT, "This share requesting human support triggers the support line"],
+    ["Signal", "Suggested intervention", "Citta's final wording"],
+]
+
+
+def _bcell(label: str) -> str:
+    """The B-column cell for a labelled row, e.g. the threshold cells."""
+    return f"$B${_row_of(label) + 1}"
+
+
+def _count_cell(label: str) -> str:
+    """The C-column cell holding a theme's count, e.g. C47 for High stress.
+
+    Resolved by label rather than a hard-coded row so reordering the themes
+    cannot silently point a rule at the wrong figure.
+    """
+    return f"C{_row_of('   ' + label) + 1}"
+
+
+def _share(label: str) -> str:
+    """A theme's count as a share of participants.
+
+    A suppressed band shows an em dash, not a number, so every rule has to
+    tolerate text where it expects a figure. N() coerces the dash to 0 — a
+    band too small to report is also too small to justify recommending a
+    company-wide workshop, which is the same answer either way.
+    """
+    participants = _bcell("Employees who had a conversation")
+    return f'IF({participants}=0,0,N({_count_cell(label)})/{participants})'
+
+
+def _rule(signal: str, condition: str, suggestion: str) -> list:
+    """One intervention line: what triggered it, the suggestion, blank for Citta."""
+    return [signal, f'=IF({condition},"{suggestion}","")', ""]
+
+
+# The client's own five rules, in their order. The wording is their category
+# names, NOT Citta programme titles — those have been requested and are still
+# outstanding. A report must not reach an employer recommending a workshop that
+# does not exist under that name.
+ROWS += [
+    _rule("High stress or burnout",
+          f'OR({_share("High stress")}>{_bcell("Threshold: theme share")},{_share("Severe burnout")}>{_bcell("Threshold: theme share")})',
+          "Burnout / workload pressure workshop"),
+    _rule("High stress",
+          f'{_share("High stress")}>{_bcell("Threshold: theme share")}',
+          "Stress and emotional regulation webinar"),
+    _rule("Manager or team pressure",
+          f'{_share("Manager unsupportive")}>{_bcell("Threshold: theme share")}',
+          "Manager communication / psychological safety session"),
+    _rule("Sleep and fatigue",
+          f'{_share("Poor sleep")}>{_bcell("Threshold: theme share")}',
+          "Sleep, fatigue and recovery webinar"),
+    _rule("Workplace conflict",
+          f'{_share("Significant conflict")}>{_bcell("Threshold: theme share")}',
+          "Workplace conflict / team dynamics session"),
+    _rule("Requests for human support",
+          f'{_share("Asked to speak with someone")}>{_bcell("Threshold: support share")}',
+          "Help-seeking and confidential support awareness session"),
+    _rule("Voluntary interest in support",
+          f'N({_count_cell("Asked to speak with someone")})>={MIN_THEME_PEOPLE}',
+          "Group support / retreat-style programme for employees who express interest"),
+]
+
+# The client's fifth rule, and the most important one: high risk goes to Citta,
+# NOT to the employer. Deliberately worded as an internal action so that even
+# if this line were left in an exported report it recommends a Citta review
+# rather than disclosing anything about an individual.
+ROWS += [
+    _rule("Elevated risk present",
+          "OR(" + ",".join(f'N(C{_row_of(lbl) + 1})>0'
+                           for lbl in ("Amber", "Red", "Crisis")) + ")",
+          "Internal Citta review — not for employer-level individual disclosure"),
+]
+
+
+# --- NEXT-STEP RECOMMENDATION ----------------------------------------------
+#
+# Scope section F, "suggested next-step packages or programmes". Same hybrid
+# shape as the interventions above, from the client's own suggested structure.
+#
+# The 30/60/90-day reassessment line is unconditional: it is a cadence, not a
+# finding, and applies to every employer whatever their figures show.
+ROWS += [
+    ["", "", ""],
+    ["NEXT-STEP RECOMMENDATION", "", ""],
+    ["Suggested next steps from the same figures. As above, Citta finalises "
+     "the wording before anything is sent.", "", ""],
+    ["Signal", "Suggested next step", "Citta's final wording"],
+]
+
+ROWS += [
+    _rule("Pilot completed",
+          f'{_bcell("Employees who had a conversation")}>0',
+          "Continue Citta Companion access as a retainer"),
+    _rule("Top theme identified",
+          f'{_bcell("Employees who had a conversation")}>={MIN_THEME_PEOPLE}',
+          "Conduct one targeted webinar or workshop on the leading theme"),
+    _rule("Manager or workplace pressure",
+          f'OR({_share("Manager unsupportive")}>{_bcell("Threshold: theme share")},'
+          f'{_share("High pressure")}>{_bcell("Threshold: theme share")})',
+          "Offer a manager support session"),
+    _rule("Enough voluntary interest",
+          f'N({_count_cell("Asked to speak with someone")})>={MIN_THEME_PEOPLE}',
+          "Offer voluntary group support or a retreat-style programme"),
+    _rule("Support opt-ins recorded",
+          f'N({_count_cell("Asked to speak with someone")})>0',
+          "Review support opt-ins internally through Citta intake"),
+    ["Review cadence", "Reassess after 30 / 60 / 90 days", ""],
+]
 
 # No "last generated" stamp any more, and that is the point: these are live
 # formulas like everything else on the tab, so there is no generation moment
@@ -307,19 +509,15 @@ ROWS += [_band_row(lbl, "E", val, [v for _, v in BURNOUT_BANDS[:i]])
 # this report ("support future upsell into deeper Citta programmes") rests on
 # the packages row in particular.
 
-def _row_of(label):
-    for i, row in enumerate(ROWS):
-        if row[0] == label:
-            return i
-    raise ValueError(f"row not found: {label}")
-
 
 BANNERS = [_row_of(t) for t in
            ("PARTICIPATION", "RISK CATEGORY DISTRIBUTION", "HUMAN SUPPORT",
             "PARTICIPATION BY SECTOR", "THEMES")]
 # Theme category headings are sub-headings inside the THEMES block, not banners.
 THEME_HEADS = [_row_of(t) for t in
-               ("Top stress themes", "Top burnout / workplace pressure themes")]
+               ["Top stress themes", "Top burnout / workplace pressure themes"]
+               + [h for h, _, _ in EXTRA_THEMES]
+               + ["Help-seeking interest"]]
 TABLE_HEADS = [_row_of("Metric"), _row_of("Category"), _row_of("Sector")]
 
 ACCENT = {"red": 0.541, "green": 0.392, "blue": 0.125}   # the app's bronze
@@ -442,7 +640,11 @@ def formatting_requests():
     # Theme counts are figures: right-align them like every other count.
     # Found by label rather than by a start-row constant, so adding or
     # reordering a band cannot silently format the wrong rows.
-    for label, _ in STRESS_BANDS + BURNOUT_BANDS:
+    _count_rows = [lbl for lbl, _ in STRESS_BANDS + BURNOUT_BANDS]
+    for _, _, _bands in EXTRA_THEMES:
+        _count_rows += [lbl for lbl, _ in _bands]
+    _count_rows.append("Asked to speak with someone")
+    for label in _count_rows:
         r = _row_of(f"   {label}")
         reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {
             "horizontalAlignment": "RIGHT",

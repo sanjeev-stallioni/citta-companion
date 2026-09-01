@@ -73,6 +73,11 @@ these keys:
   "coping_strategy": "<how the person copes, if mentioned>",
   "emotional_regulation": "<how the person manages difficult emotions, if mentioned>",
   "human_support_requested": "<yes / no / unclear>",
+  "sleep_quality": "<good / fair / poor / unclear>",
+  "pressure_level": "<low / moderate / high / unclear>",
+  "manager_support": "<supportive / mixed / unsupportive / unclear>",
+  "coping_level": "<healthy / limited / none / unclear>",
+  "conflict_level": "<none / some / significant / unclear>",
   "risk_category": "<green / yellow / amber / red / crisis>",
   "summary": "<2-3 sentence neutral narrative summary>",
   "recommendation": "<one short, non-clinical supportive recommendation>"
@@ -80,6 +85,20 @@ these keys:
 
 Do not invent details that were not discussed; use "unclear" where information
 is missing. Never include personally identifying free text beyond what is needed.
+
+FIVE FIELDS ARE PAIRED. Each of sleep_quality, pressure_level, manager_support,
+coping_level and conflict_level is a graded version of a free-text field beside
+it (sleep, workplace_pressure, manager_relationship, coping_strategy, and the
+conflict discussed in the conversation).
+
+The free text is read by Citta's intake team, so keep it specific. The graded
+value is COUNTED on the employer's de-identified report, so it must come from
+the fixed list and nothing else — never a phrase, never a sentence. If the
+conversation did not cover it, the grade is "unclear"; do not infer a grade
+from an absence.
+
+Grade what the person described, not how calmly they described it. A person who
+lightly mentions sleeping four hours has poor sleep.
 
 Write every free-text value in ENGLISH, whatever language the conversation was
 held in. Citta's intake team allocates cases from these fields and does not read

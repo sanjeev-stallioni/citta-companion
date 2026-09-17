@@ -507,6 +507,7 @@ def save_support_lead(
     human_support_requested: str,
     notes: str = "",
     risk_category: str = "",
+    opted_in: bool | None = None,
 ) -> bool:
     """Persist a request for human support. Returns success flag.
 
@@ -520,7 +521,16 @@ def save_support_lead(
         employee_id,
         _titled(risk_category),
         _titled(human_support_requested),
-        "",  # Contact Opt-in — from the Employee Registry
+        # Contact Opt-in. Blank until now, which made the tab misleading: the
+        # scope admits people here who "have consented OR requested further
+        # support", so a row reading "Human Support: No" with nothing beside it
+        # looks like someone who does not belong on the list. It is the reason
+        # they are on it.
+        #
+        # "unknown" rather than "No" when the lookup failed -- the registry
+        # read fails open, and recording a silent failure as a refusal of
+        # contact is the wrong direction to guess in.
+        ("" if opted_in is None else ("Yes" if opted_in else "No")),
         "",  # Assigned To      \
         "",  # Contact Date      > filled by Citta's intake team
         "",  # Contact Outcome  /

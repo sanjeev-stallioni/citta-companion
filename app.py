@@ -213,7 +213,7 @@ def handle_finish_conversation() -> None:
     if requested:
         save_support_lead(
             emp, sector, lang, "yes", notes,
-            risk_category=summary.get("risk_category", ""),
+            risk_category=summary.get("risk_category", ""), opted_in=opted_in,
         )
         # Alert as well as record. Writing the lead row only meant a request to
         # speak to a human sat in a spreadsheet nobody was watching — server.py
@@ -232,7 +232,7 @@ def handle_finish_conversation() -> None:
         # "who have consented OR requested further support".
         save_support_lead(
             emp, sector, lang, "no", notes,
-            risk_category=summary.get("risk_category", ""),
+            risk_category=summary.get("risk_category", ""), opted_in=opted_in,
         )
         send_opt_in_alert(
             emp, sector,

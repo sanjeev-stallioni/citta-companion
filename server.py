@@ -242,7 +242,7 @@ def api_finish():
     if requested:
         save_support_lead(
             emp, sector, lang, "yes", notes,
-            risk_category=summary.get("risk_category", ""),
+            risk_category=summary.get("risk_category", ""), opted_in=opted_in,
         )
         send_support_request_alert(
             emp, sector, notes,
@@ -253,7 +253,7 @@ def api_finish():
         # from asking during the conversation.
         save_support_lead(
             emp, sector, lang, "no", notes,
-            risk_category=summary.get("risk_category", ""),
+            risk_category=summary.get("risk_category", ""), opted_in=opted_in,
         )
         send_opt_in_alert(
             emp, sector,
@@ -284,10 +284,17 @@ def api_callback():
     if session is None:
         return jsonify({"error": "invalid session"}), 400
     notes = "Employee requested a callback from the chat sidebar."
+    # Look the opt-in up here too. This endpoint bypasses the end-of-chat path
+    # entirely, so without it a callback request lands in Support Leads with a
+    # blank opt-in column while the same person requesting support at the end
+    # of a conversation gets it filled in.
+    opted_in = contact_opt_in(session["employee_id"])
     saved = save_support_lead(
-        session["employee_id"], session["sector"], session["lang"], "yes", notes
+        session["employee_id"], session["sector"], session["lang"], "yes", notes,
+        opted_in=opted_in,
     )
-    send_support_request_alert(session["employee_id"], session["sector"], notes)
+    send_support_request_alert(
+        session["employee_id"], session["sector"], notes, opted_in=opted_in)
     return jsonify({"saved": saved})
 
 

@@ -421,10 +421,20 @@ def build_rows():
     ROWS = []
     ROWS += [
 
-        ["Citta Companion — Executive Report", "", ""],
+        # The company belongs in the TITLE, not only in the tab name. Inside
+        # the spreadsheet the tab name identifies the report; in an exported
+        # PDF there is no tab name, so every company's report was headed
+        # identically and two of them could not be told apart. The printed
+        # date matters for the same reason: a PDF is a snapshot of a live
+        # report, and an undated one gives no clue how stale it is.
+        [f"Citta Companion — Executive Report — {COMPANY}" if COMPANY
+         else "Citta Companion — Executive Report (ALL COMPANIES — INTERNAL)",
+         "", ""],
         ["De-identified. Contains no names, emails, phone numbers, individual "
          "answers, transcripts, or identifiable risk data.", "", ""],
-        ["Generated live from the data tabs — figures update as conversations complete.", "", ""],
+        ['=CONCATENATE("Figures as at ",TEXT(NOW(),"d mmmm yyyy, HH:mm"),'
+         '" — this sheet updates live; a printed or exported copy does not.")',
+         "", ""],
         ["", "", ""],
 
         ["PARTICIPATION", "", ""],

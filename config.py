@@ -77,6 +77,11 @@ WORKSHEET_SUMMARIES = _get_env("WORKSHEET_SUMMARIES", "Chat Summaries")
 WORKSHEET_RISK_FLAGS = _get_env("WORKSHEET_RISK_FLAGS", "Risk Flags")
 WORKSHEET_SUPPORT_LEADS = _get_env("WORKSHEET_SUPPORT_LEADS", "Support Leads")
 WORKSHEET_REGISTRY = _get_env("WORKSHEET_REGISTRY", "Employee Registry")
+# Multi-company, Phase 2. The register is what makes a company-prefixed
+# Employee ID legitimate: a prefix nobody has registered belongs to no company
+# and is counted on no report. Without it, a typo (ACNE-EMP001 for
+# ACME-EMP001) would quietly invent a company rather than surface as an error.
+WORKSHEET_COMPANIES = _get_env("WORKSHEET_COMPANIES", "Company Register")
 
 # Require the Employee ID in a link to exist in the registry before a chat may
 # start. Off by default so local development and tests keep working without

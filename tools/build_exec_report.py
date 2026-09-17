@@ -725,7 +725,15 @@ def formatting_requests():
         # rather than a spreadsheet someone stopped filling in.
         {"updateSheetProperties": {
             "properties": {"sheetId": SHEET_ID, "gridProperties": {
-                "hideGridlines": True, "frozenRowCount": 3}},
+                # frozenRowCount is 0 DELIBERATELY.
+                #
+                # Frozen rows are repeated at the top of EVERY printed page, so
+                # the title and both disclaimer lines reappeared on all three
+                # pages of the exported PDF -- six wasted lines, and on page 2
+                # they pushed the content down past a large blank gap. On screen
+                # freezing bought little: the report is read top to bottom, not
+                # scrolled like a data table.
+                "hideGridlines": True, "frozenRowCount": 0}},
             "fields": "gridProperties(hideGridlines,frozenRowCount)"}},
         {"updateDimensionProperties": {
             "range": {"sheetId": SHEET_ID, "dimension": "COLUMNS",
@@ -751,10 +759,6 @@ def formatting_requests():
         # instead of the text disappearing.
         _fmt(0, 200, {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
              "userEnteredFormat.wrapStrategy", 0, 3),
-        {"updateSheetProperties": {
-            "properties": {"sheetId": SHEET_ID,
-                           "gridProperties": {"frozenRowCount": 3}},
-            "fields": "gridProperties.frozenRowCount"}},
     ]
     for r in BANNERS:
         reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {

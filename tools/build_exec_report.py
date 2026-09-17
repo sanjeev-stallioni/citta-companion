@@ -140,9 +140,43 @@ def _mine() -> str:
 # as the criterion evaluates per row inside SUMPRODUCT.
 
 # Registered people whose summary says a given risk category.
+RISK_ORDER = ["Crisis", "Red", "Amber", "Yellow", "Green"]
+
+
+def _at_risk(cat):
+    """Expression: this person has at least one conversation at ``cat``.
+
+    Crisis reads BOTH tabs, because a crisis locks the chat before "Finish"
+    and so often exists only as a Risk Flags row, never a summary.
+    """
+    ids, me = _r(CS, "A2:A"), _r(ER, "B2:B")
+    has = f'COUNTIFS({ids},{me},{_r(CS,"M2:M")},"{cat}")'
+    if cat == "Crisis":
+        return f'({has}+COUNTIF({_r(RF,"A2:A")},{me}))'
+    return f'({has})'
+
+
 def risk(cat):
-    return (f'SUMPRODUCT({_mine()}'
-            f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"M2:M")},"{cat}")>0))')
+    """Registered people whose HIGHEST risk category is ``cat``.
+
+    Each person counted once, in their worst band, exactly as ``band()`` does
+    for the themes.
+
+    The first version asked only "has at least one conversation at this
+    level", which double-counts anyone who chatted more than once. Measured on
+    CITTA: 5 participants reported as Green 20% + Amber 100% + Crisis 40% =
+    160%. Every individual count was right; EMP004 simply appeared in three
+    bands at once, having had an Amber, a Green and a crisis flag. An employer
+    reading a column headed "Share" would conclude 100% of their staff were
+    Amber AND a further 40% in crisis. The house pattern again: no error,
+    plausible output, wrong.
+    """
+    worse = [c for c in RISK_ORDER if c != cat][:RISK_ORDER.index(cat)]
+    expr = f'SUMPRODUCT({_mine()}*({_at_risk(cat)}>0)'
+    if worse:
+        higher = "+".join(_at_risk(w) for w in worse)
+        expr += f'*(({higher})=0)'
+    return expr + ")"
 
 
 # Registered people at crisis, from either tab, counted once each. A crisis
@@ -416,7 +450,8 @@ def build_rows():
         # Crisis counts BOTH sources, deduplicated. Counting summaries alone
         # reported "Crisis 0" in a pilot where someone had genuinely reached
         # crisis — the single most consequential figure to under-report.
-        ["Crisis", f"={crisis_people()}", '=IF($B$8=0,"—",B19/$B$8)'],
+        # It is also the top band, so anyone here is excluded from the rest.
+        ["Crisis", f"={risk('Crisis')}", '=IF($B$8=0,"—",B19/$B$8)'],
         ["Uncategorised", '=MAX(0,$B$8-SUM(B15:B19))', '=IF($B$8=0,"—",B20/$B$8)'],
         ["", "", ""],
 

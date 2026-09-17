@@ -37,6 +37,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
 import config
+from company import normalise_code
 
 MIN_GROUP = 5          # suppress sector rows below this headcount
 SECTOR_ROWS = 12       # how many sector lines the block allows for
@@ -67,6 +68,63 @@ CS = "'Chat Summaries'"
 RF = "'Risk Flags'"
 ER = "'Employee Registry'"
 
+# --- MULTI-COMPANY FILTERING ------------------------------------------------
+#
+# Phase 2, Option A: one shared spreadsheet, one report TAB per company, each
+# showing only that company's employees. The company lives in the Employee ID
+# prefix (ACME-EMP001), so filtering is a prefix test -- see company.py.
+#
+# COMPANY is set by build_for() before the rows are built. None means the
+# all-company overview, which Citta keeps internally and must never be shared
+# with an employer.
+#
+# WHY THIS IS ONE PREDICATE AND NOT TWENTY
+# Every people-count on this tab already walks the REGISTRY and asks "does this
+# person appear in the data tab?" -- never the other way round. So restricting
+# the registry side to one company restricts every figure derived from it, in
+# one place. Threading a company check through each of the twenty-odd formulas
+# individually would mean twenty chances to miss one, and a missed filter does
+# not error: it quietly shows another employer's employees on this company's
+# report. That is the failure this whole phase exists to prevent.
+COMPANY = None
+
+
+def _company_test(id_range: str) -> str:
+    """Sheets predicate, TRUE per row, for IDs belonging to COMPANY.
+
+    LEFT(range, n) = "CODE-", NOT COUNTIF(range, "CODE-*").
+
+    This was COUNTIF first and it silently corrupted every figure. COUNTIF
+    returns ONE number for the whole range -- how many rows match -- so inside
+    SUMPRODUCT it multiplies every row by that count instead of selecting
+    rows. CITTA reported 35 employees invited from 5 (5 people x 7 registry
+    rows), and both company tabs showed the all-company participation figure.
+    Nothing errored; the numbers simply looked plausible and were wrong.
+    Measured live: COUNTIF 35, LEFT 5, truth 5.
+
+    LEFT() evaluates per row, which is what SUMPRODUCT needs. The length comes
+    from the code itself so codes of differing length stay correct, and the
+    trailing hyphen stops ACME matching ACMEX.
+
+    Returns "1" (always true) for the all-company overview, so the same
+    formula text works on every tab.
+    """
+    if not COMPANY:
+        return "1"
+    return f'(LEFT({id_range},{len(COMPANY) + 1})="{COMPANY}-")'
+
+
+def _mine() -> str:
+    """"This registry row exists AND belongs to this company."
+
+    Every people-count multiplies by this instead of the bare `<>""` test it
+    used before. One expression, one place to get right.
+    """
+    me = _r(ER, "B2:B")
+    if not COMPANY:
+        return f'({me}<>"")'
+    return f'(({me}<>"")*{_company_test(me)})'
+
 # Every people-count below walks the REGISTRY and asks "does this person
 # appear in the data tab?", never the other way round. Registry IDs are unique
 # per person, so distinctness is free — and an ID that is not in the registry
@@ -83,148 +141,59 @@ ER = "'Employee Registry'"
 
 # Registered people whose summary says a given risk category.
 def risk(cat):
-    return (f'SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
+    return (f'SUMPRODUCT({_mine()}'
             f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"M2:M")},"{cat}")>0))')
 
 
 # Registered people at crisis, from either tab, counted once each. A crisis
 # locks the chat before "Finish", so those conversations often exist only as
 # a Risk Flags row, never a summary.
-CRISIS_PEOPLE = (
-    f'SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
-    f'*((COUNTIF({_r(RF,"A2:A")},{_r(ER,"B2:B")})'
-    f'+COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"M2:M")},"Crisis"))>0))'
-)
+# These are FUNCTIONS, not constants.
+#
+# As module constants they were evaluated once at import, when COMPANY is
+# still None -- so every company tab inherited the unfiltered formula and
+# reported the all-company participation figure. Measured: every tab said 7
+# people had a conversation, against 5 CITTA and 2 ACME. Anything that closes
+# over COMPANY must be built after build_rows() sets it.
+def crisis_people():
+    """Registered people at crisis, from either tab, counted once each."""
+    return (f'SUMPRODUCT({_mine()}'
+            f'*((COUNTIF({_r(RF,"A2:A")},{_r(ER,"B2:B")})'
+            f'+COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"M2:M")},"Crisis"))>0))')
 
-# Registered people who had a conversation: a summary, a risk flag, or both.
-PARTICIPANTS = (
-    f'SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
-    f'*((COUNTIF({_r(CS,"A2:A")},{_r(ER,"B2:B")})+COUNTIF({_r(RF,"A2:A")},{_r(ER,"B2:B")}))>0))'
-)
+
+def participants():
+    """Registered people who had a conversation: summary, risk flag, or both."""
+    return (f'SUMPRODUCT({_mine()}'
+            f'*((COUNTIF({_r(CS,"A2:A")},{_r(ER,"B2:B")})'
+            f'+COUNTIF({_r(RF,"A2:A")},{_r(ER,"B2:B")}))>0))')
 
 # Rows in the data tabs whose ID is NOT in the registry — the rows every
 # figure above excludes. Anything other than 0 deserves a look.
-UNMATCHED = (
-    f'SUMPRODUCT(({_r(CS,"A2:A")}<>"")*(COUNTIF({_r(ER,"B2:B")},{_r(CS,"A2:A")})=0))'
-    f'+SUMPRODUCT(({_r(RF,"A2:A")}<>"")*(COUNTIF({_r(ER,"B2:B")},{_r(RF,"A2:A")})=0))'
-)
+def _rows_here(tab: str) -> str:
+    """Count rows on a data tab, restricted to this company's Employee IDs."""
+    ids = _r(tab, "A2:A")
+    if not COMPANY:
+        return f'COUNTIF({ids},"<>")'
+    return f'COUNTIF({ids},"{COMPANY}-*")'
 
-ROWS = [
-    ["Citta Companion — Executive Report", "", ""],
-    ["De-identified. Contains no names, emails, phone numbers, individual "
-     "answers, transcripts, or identifiable risk data.", "", ""],
-    ["Generated live from the data tabs — figures update as conversations complete.", "", ""],
-    ["", "", ""],
 
-    ["PARTICIPATION", "", ""],
-    ["Metric", "Value", "Notes"],
-    ["Employees invited", f'=COUNTUNIQUEIFS({_r(ER,"B2:B")},{_r(ER,"B2:B")},"<>")',
-     "Distinct Employee IDs in the registry"],
-    ["Employees who had a conversation", f"={PARTICIPANTS}",
-     "Distinct registered people. Includes crisis chats, which never reach a summary"],
-    ["Participation rate", '=IF(B7=0,"—",B8/B7)', "Completed ÷ invited"],
-    ["Conversations recorded", f'=COUNTIF({_r(CS,"A2:A")},"<>")',
-     "Total rows; exceeds participants if anyone chats twice"],
-    ["Conversations from unregistered IDs", f"={UNMATCHED}",
-     "Should be 0. Rows whose ID is not in the registry — test chats or "
-     "deleted registrations; excluded from every figure above"],
-    ["", "", ""],
+def _unmatched() -> str:
+    """Rows in a data tab whose ID is not in the registry. Should read 0.
 
-    ["RISK CATEGORY DISTRIBUTION", "", ""],
-    ["Category", "Employees", "Share"],
-    ["Green",  f"={risk('Green')}",  '=IF($B$8=0,"—",B15/$B$8)'],
-    ["Yellow", f"={risk('Yellow')}", '=IF($B$8=0,"—",B16/$B$8)'],
-    ["Amber",  f"={risk('Amber')}",  '=IF($B$8=0,"—",B17/$B$8)'],
-    ["Red",    f"={risk('Red')}",    '=IF($B$8=0,"—",B18/$B$8)'],
-    # Crisis counts BOTH sources, deduplicated. Counting summaries alone
-    # reported "Crisis 0" in a pilot where someone had genuinely reached
-    # crisis — the single most consequential figure to under-report.
-    ["Crisis", f"={CRISIS_PEOPLE}", '=IF($B$8=0,"—",B19/$B$8)'],
-    ["Uncategorised", '=MAX(0,$B$8-SUM(B15:B19))', '=IF($B$8=0,"—",B20/$B$8)'],
-    ["", "", ""],
+    On a company tab this counts only IDs carrying THIS company's prefix.
+    Without that, every other employer's conversations would be reported here
+    as "unregistered" -- alarming, wrong, and a slow leak of how much traffic
+    other companies are generating.
+    """
+    parts = []
+    for tab in (CS, RF):
+        ids = _r(tab, "A2:A")
+        mine = "" if not COMPANY else f"*{_company_test(ids)}"
+        parts.append(
+            f'SUMPRODUCT(({ids}<>""){mine}*(COUNTIF({_r(ER,"B2:B")},{ids})=0))')
+    return "+".join(parts)
 
-    ["HUMAN SUPPORT", "", ""],
-    ["Metric", "Value", "Notes"],
-    ["Employees requesting human support",
-     f'=SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
-     f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"K2:K")},"Yes")>0))',
-     "Distinct registered people answering Yes"],
-    ["Percentage requesting human support", '=IF($B$8=0,"—",B24/$B$8)',
-     "Scope item: percentage, not count"],
-    ["Crisis escalations raised", f'=COUNTIF({_r(RF,"A2:A")},"<>")',
-     "Rows in Risk Flags; count only, never the trigger text"],
-    ["", "", ""],
-
-    ["PARTICIPATION BY SECTOR", "", ""],
-    [f"Groups smaller than {MIN_GROUP} people are suppressed to protect anonymity, "
-     "as required by the scope.", "", ""],
-    ["Sector", "Invited", "Completed"],
-]
-
-# Sector rows are generated from the registry's distinct sectors, with
-# suppression applied to both columns.
-SECTOR_START = len(ROWS) + 1  # 1-indexed row of the first sector line
-for i in range(SECTOR_ROWS):
-    r = SECTOR_START + i
-    src = (f'IFERROR(INDEX(SORT(UNIQUE(FILTER({_r(ER,"I2:I")},{_r(ER,"I2:I")}<>""))),{i+1},1),"")')
-    invited = f'COUNTIF({_r(ER,"I2:I")},$A{r})'
-    # Count registry rows for this sector whose ID appears in Chat Summaries
-    # OR Risk Flags. Both tabs, for the same reason the headline participation
-    # figure counts both: a crisis locks the chat before "Finish", so those
-    # people have a Risk Flags row and no summary. Counting summaries alone
-    # reported a sector's completed as 0 while the person was in genuine
-    # crisis — verified live on 24 Aug with two probe employees.
-    #
-    # SUMPRODUCT tolerates no matches; FILTER would return #N/A.
-    completed = (f'SUMPRODUCT(({_r(ER,"I2:I")}=$A{r})*'
-                 f'((COUNTIF({_r(CS,"A2:A")},{_r(ER,"B2:B")})'
-                 f'+COUNTIF({_r(RF,"A2:A")},{_r(ER,"B2:B")}))>0))')
-    ROWS.append([
-        f"={src}",
-        f'=IF($A{r}="","",IF({invited}<{MIN_GROUP},"Suppressed (n<{MIN_GROUP})",{invited}))',
-        f'=IF($A{r}="","",IF({invited}<{MIN_GROUP},"Suppressed (n<{MIN_GROUP})",{completed}))',
-    ])
-
-# --- THEMES ---------------------------------------------------------------
-#
-# The scope asks this sheet for four theme rows. Two are built here — top
-# stress themes and top burnout/workplace pressure themes. The other two,
-# suggested intervention themes and suggested next-step packages, are not in
-# this sheet at all: they need Citta's actual programme names and clinical
-# review, and inventing them would be the same failure as the chatbot
-# inventing a helpline number. See the note below the burnout block.
-#
-# These were originally generated by Gemini, which grouped the free-text
-# summary fields into invented labels. That is gone, and the reasoning is
-# worth keeping because it applies to any future "let the model summarise it"
-# idea on this tab.
-#
-# The chatbot ALREADY classifies stress and burnout at the end of every
-# conversation, into a closed vocabulary fixed in prompts.py:
-#
-#     stress_level : low / moderate / high / unclear
-#     burnout      : none / mild / moderate / severe / unclear
-#
-# So the old code paid Gemini a second time to re-group values Gemini had
-# already grouped, and stored the result as text that could not update itself.
-# Counting the columns instead is not a workaround — it is reading the answer
-# that was already computed. That buys, in one change:
-#
-#   * zero API calls per rebuild (was two)
-#   * live formulas, so the block updates itself like every other figure and
-#     needs no schedule, no cron, and no "last generated" stamp
-#   * no generated text anywhere on this tab, so the sheet the EMPLOYER reads
-#     is now structurally incapable of carrying an employee's words across.
-#     That is a stronger guarantee than the three prompt rules it replaces.
-#
-# What was given up: emergent themes. Gemini could surface "childcare
-# pressure" if several people raised it; a fixed vocabulary cannot. Columns
-# F-I (sleep, workplace pressure, manager/team, coping) are still free text
-# and still available if the client later wants richer themes. Raise it at
-# sign-off rather than assuming the trade is welcome.
-#
-# Suppression still applies: a band below MIN_THEME_PEOPLE shows a dash, never
-# a number. A band of one is a description of one identifiable person.
 MIN_THEME_PEOPLE = 3      # a band below this shows "—", not a count
 
 # "unclear" is deliberately absent from both lists. It is the model declining
@@ -298,9 +267,9 @@ def band(col: str, value: str, higher: list) -> str:
     me = _r(ER, "B2:B")
     has = f'COUNTIFS({ids},{me},{rng},"{value}")>0'
     if not higher:
-        return f'SUMPRODUCT(({me}<>"")*({has}))'
+        return f'SUMPRODUCT({_mine()}*({has}))'
     worse = "+".join(f'COUNTIFS({ids},{me},{rng},"{h}")' for h in higher)
-    return f'SUMPRODUCT(({me}<>"")*({has})*(({worse})=0))'
+    return f'SUMPRODUCT({_mine()}*({has})*(({worse})=0))'
 
 
 def _band_row(label: str, col: str, value: str, higher: list) -> list:
@@ -310,50 +279,6 @@ def _band_row(label: str, col: str, value: str, higher: list) -> list:
             f'=IF({expr}<{MIN_THEME_PEOPLE},"—",{expr})']
 
 
-ROWS += [
-    ["", "", ""],
-    ["THEMES", "", ""],
-    ["Counted from the wellbeing levels recorded at the end of each "
-     "conversation. Within each theme a person is counted once, in their most "
-     f"severe band. A band with fewer than {MIN_THEME_PEOPLE} people shows "
-     "\u2014 rather than a count, so no band can describe one identifiable "
-     "person.", "", ""],
-    ["Top stress themes", "", "Employees"],
-]
-ROWS += [_band_row(lbl, "D", val, [v for _, v in STRESS_BANDS[:i]])
-         for i, (lbl, val) in enumerate(STRESS_BANDS)]
-
-ROWS += [
-    ["Top burnout / workplace pressure themes", "", "Employees"],
-]
-ROWS += [_band_row(lbl, "E", val, [v for _, v in BURNOUT_BANDS[:i]])
-         for i, (lbl, val) in enumerate(BURNOUT_BANDS)]
-
-# The five themes added Sep 2026. Same shape as the two above.
-for _head, _col, _bands in EXTRA_THEMES:
-    ROWS += [[_head, "", "Employees"]]
-    ROWS += [_band_row(lbl, _col, val, [v for _, v in _bands[:i]])
-             for i, (lbl, val) in enumerate(_bands)]
-
-# Help-seeking is not a severity scale, so it is not a band() call: column K
-# already holds a plain Yes/No written at the end of every conversation. Only
-# the "Yes" line is shown — a "No" count would tell the employer how many of
-# their staff declined support, which is a step toward reading individuals and
-# is no part of what this report is for.
-_HELP = (f'SUMPRODUCT(({_r(ER,"B2:B")}<>"")'
-         f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"K2:K")},"Yes")>0))')
-ROWS += [
-    ["Help-seeking interest", "", "Employees"],
-    ["   Asked to speak with someone", "",
-     f'=IF({_HELP}<{MIN_THEME_PEOPLE},"—",{_HELP})'],
-]
-
-
-def _row_of(label):
-    for i, row in enumerate(ROWS):
-        if row[0] == label:
-            return i
-    raise ValueError(f"row not found: {label}")
 
 
 # --- RECOMMENDATIONS -------------------------------------------------------
@@ -384,17 +309,6 @@ def _row_of(label):
 THRESH_SHARE = 0.30    # a theme covering this share of participants is "high"
 THRESH_SUPPORT = 0.20  # this share asking for a human triggers the support line
 
-ROWS += [
-    ["", "", ""],
-    ["RECOMMENDED INTERVENTIONS", "", ""],
-    ["Suggested from the figures above. Citta reviews and rewrites every line "
-     "before anything reaches an employer — the suggestions are a starting "
-     "point, not a decision. Nothing here names or describes an individual.",
-     "", ""],
-    ["Threshold: theme share", THRESH_SHARE, "A theme above this share of participants counts as high"],
-    ["Threshold: support share", THRESH_SUPPORT, "This share requesting human support triggers the support line"],
-    ["Signal", "Suggested intervention", "Citta's final wording"],
-]
 
 
 def _bcell(label: str) -> str:
@@ -432,40 +346,11 @@ def _rule(signal: str, condition: str, suggestion: str) -> list:
 # names, NOT Citta programme titles — those have been requested and are still
 # outstanding. A report must not reach an employer recommending a workshop that
 # does not exist under that name.
-ROWS += [
-    _rule("High stress or burnout",
-          f'OR({_share("High stress")}>{_bcell("Threshold: theme share")},{_share("Severe burnout")}>{_bcell("Threshold: theme share")})',
-          "Burnout / workload pressure workshop"),
-    _rule("High stress",
-          f'{_share("High stress")}>{_bcell("Threshold: theme share")}',
-          "Stress and emotional regulation webinar"),
-    _rule("Manager or team pressure",
-          f'{_share("Manager unsupportive")}>{_bcell("Threshold: theme share")}',
-          "Manager communication / psychological safety session"),
-    _rule("Sleep and fatigue",
-          f'{_share("Poor sleep")}>{_bcell("Threshold: theme share")}',
-          "Sleep, fatigue and recovery webinar"),
-    _rule("Workplace conflict",
-          f'{_share("Significant conflict")}>{_bcell("Threshold: theme share")}',
-          "Workplace conflict / team dynamics session"),
-    _rule("Requests for human support",
-          f'{_share("Asked to speak with someone")}>{_bcell("Threshold: support share")}',
-          "Help-seeking and confidential support awareness session"),
-    _rule("Voluntary interest in support",
-          f'N({_count_cell("Asked to speak with someone")})>={MIN_THEME_PEOPLE}',
-          "Group support / retreat-style programme for employees who express interest"),
-]
 
 # The client's fifth rule, and the most important one: high risk goes to Citta,
 # NOT to the employer. Deliberately worded as an internal action so that even
 # if this line were left in an exported report it recommends a Citta review
 # rather than disclosing anything about an individual.
-ROWS += [
-    _rule("Elevated risk present",
-          "OR(" + ",".join(f'N(C{_row_of(lbl) + 1})>0'
-                           for lbl in ("Amber", "Red", "Crisis")) + ")",
-          "Internal Citta review — not for employer-level individual disclosure"),
-]
 
 
 # --- NEXT-STEP RECOMMENDATION ----------------------------------------------
@@ -475,33 +360,7 @@ ROWS += [
 #
 # The 30/60/90-day reassessment line is unconditional: it is a cadence, not a
 # finding, and applies to every employer whatever their figures show.
-ROWS += [
-    ["", "", ""],
-    ["NEXT-STEP RECOMMENDATION", "", ""],
-    ["Suggested next steps from the same figures. As above, Citta finalises "
-     "the wording before anything is sent.", "", ""],
-    ["Signal", "Suggested next step", "Citta's final wording"],
-]
 
-ROWS += [
-    _rule("Pilot completed",
-          f'{_bcell("Employees who had a conversation")}>0',
-          "Continue Citta Companion access as a retainer"),
-    _rule("Top theme identified",
-          f'{_bcell("Employees who had a conversation")}>={MIN_THEME_PEOPLE}',
-          "Conduct one targeted webinar or workshop on the leading theme"),
-    _rule("Manager or workplace pressure",
-          f'OR({_share("Manager unsupportive")}>{_bcell("Threshold: theme share")},'
-          f'{_share("High pressure")}>{_bcell("Threshold: theme share")})',
-          "Offer a manager support session"),
-    _rule("Enough voluntary interest",
-          f'N({_count_cell("Asked to speak with someone")})>={MIN_THEME_PEOPLE}',
-          "Offer voluntary group support or a retreat-style programme"),
-    _rule("Support opt-ins recorded",
-          f'N({_count_cell("Asked to speak with someone")})>0',
-          "Review support opt-ins internally through Citta intake"),
-    ["Review cadence", "Reassess after 30 / 60 / 90 days", ""],
-]
 
 # No "last generated" stamp any more, and that is the point: these are live
 # formulas like everything else on the tab, so there is no generation moment
@@ -517,15 +376,274 @@ ROWS += [
 # the packages row in particular.
 
 
-BANNERS = [_row_of(t) for t in
-           ("PARTICIPATION", "RISK CATEGORY DISTRIBUTION", "HUMAN SUPPORT",
-            "PARTICIPATION BY SECTOR", "THEMES")]
-# Theme category headings are sub-headings inside the THEMES block, not banners.
-THEME_HEADS = [_row_of(t) for t in
-               ["Top stress themes", "Top burnout / workplace pressure themes"]
-               + [h for h, _, _ in EXTRA_THEMES]
-               + ["Help-seeking interest"]]
-TABLE_HEADS = [_row_of("Metric"), _row_of("Category"), _row_of("Sector")]
+def build_rows():
+    """Build the ROWS layout for the current COMPANY.
+
+    Re-run per company: the formulas close over COMPANY at build time, so the
+    same code produces a filtered tab for each employer and an unfiltered one
+    for Citta's internal overview.
+    """
+    global ROWS, SECTOR_START, THEME_STAMP_ROW
+    ROWS = []
+    ROWS += [
+
+        ["Citta Companion — Executive Report", "", ""],
+        ["De-identified. Contains no names, emails, phone numbers, individual "
+         "answers, transcripts, or identifiable risk data.", "", ""],
+        ["Generated live from the data tabs — figures update as conversations complete.", "", ""],
+        ["", "", ""],
+
+        ["PARTICIPATION", "", ""],
+        ["Metric", "Value", "Notes"],
+        ["Employees invited", f'=SUMPRODUCT({_mine()})',
+         "Distinct Employee IDs in the registry"],
+        ["Employees who had a conversation", f"={participants()}",
+         "Distinct registered people. Includes crisis chats, which never reach a summary"],
+        ["Participation rate", '=IF(B7=0,"—",B8/B7)', "Completed ÷ invited"],
+        ["Conversations recorded", f"={_rows_here(CS)}",
+         "Total rows; exceeds participants if anyone chats twice"],
+        ["Conversations from unregistered IDs", f"={_unmatched()}",
+         "Should be 0. Rows whose ID is not in the registry — test chats or "
+         "deleted registrations; excluded from every figure above"],
+        ["", "", ""],
+
+        ["RISK CATEGORY DISTRIBUTION", "", ""],
+        ["Category", "Employees", "Share"],
+        ["Green",  f"={risk('Green')}",  '=IF($B$8=0,"—",B15/$B$8)'],
+        ["Yellow", f"={risk('Yellow')}", '=IF($B$8=0,"—",B16/$B$8)'],
+        ["Amber",  f"={risk('Amber')}",  '=IF($B$8=0,"—",B17/$B$8)'],
+        ["Red",    f"={risk('Red')}",    '=IF($B$8=0,"—",B18/$B$8)'],
+        # Crisis counts BOTH sources, deduplicated. Counting summaries alone
+        # reported "Crisis 0" in a pilot where someone had genuinely reached
+        # crisis — the single most consequential figure to under-report.
+        ["Crisis", f"={crisis_people()}", '=IF($B$8=0,"—",B19/$B$8)'],
+        ["Uncategorised", '=MAX(0,$B$8-SUM(B15:B19))', '=IF($B$8=0,"—",B20/$B$8)'],
+        ["", "", ""],
+
+        ["HUMAN SUPPORT", "", ""],
+        ["Metric", "Value", "Notes"],
+        ["Employees requesting human support",
+         f'=SUMPRODUCT({_mine()}'
+         f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"K2:K")},"Yes")>0))',
+         "Distinct registered people answering Yes"],
+        ["Percentage requesting human support", '=IF($B$8=0,"—",B24/$B$8)',
+         "Scope item: percentage, not count"],
+        ["Crisis escalations raised", f"={_rows_here(RF)}",
+         "Rows in Risk Flags; count only, never the trigger text"],
+        ["", "", ""],
+
+        ["PARTICIPATION BY SECTOR", "", ""],
+        [f"Groups smaller than {MIN_GROUP} people are suppressed to protect anonymity, "
+         "as required by the scope.", "", ""],
+        ["Sector", "Invited", "Completed"],
+    ]
+
+    # Sector rows are generated from the registry's distinct sectors, with
+    # suppression applied to both columns.
+    SECTOR_START = len(ROWS) + 1  # 1-indexed row of the first sector line
+    for i in range(SECTOR_ROWS):
+        r = SECTOR_START + i
+        # The sector LIST is filtered too, not just the counts. An unfiltered list
+        # would print another employer's department names on this company's
+        # report — no numbers beside them, but the names alone say who else Citta
+        # is working with and how their organisation is structured.
+        sect = _r(ER, "I2:I")
+        ids = _r(ER, "B2:B")
+        keep = f'{sect}<>""' if not COMPANY else \
+            f'({sect}<>"")*{_company_test(ids)}'
+        src = (f'IFERROR(INDEX(SORT(UNIQUE(FILTER({sect},{keep}))),{i+1},1),"")')
+        invited = (f'COUNTIF({sect},$A{r})' if not COMPANY else
+                   f'SUMPRODUCT(({sect}=$A{r})*{_company_test(ids)})')
+        # Count registry rows for this sector whose ID appears in Chat Summaries
+        # OR Risk Flags. Both tabs, for the same reason the headline participation
+        # figure counts both: a crisis locks the chat before "Finish", so those
+        # people have a Risk Flags row and no summary. Counting summaries alone
+        # reported a sector's completed as 0 while the person was in genuine
+        # crisis — verified live on 24 Aug with two probe employees.
+        #
+        # SUMPRODUCT tolerates no matches; FILTER would return #N/A.
+        mine = "" if not COMPANY else f"*{_company_test(ids)}"
+        completed = (f'SUMPRODUCT(({sect}=$A{r}){mine}*'
+                     f'((COUNTIF({_r(CS,"A2:A")},{ids})'
+                     f'+COUNTIF({_r(RF,"A2:A")},{ids}))>0))')
+        ROWS.append([
+            f"={src}",
+            f'=IF($A{r}="","",IF({invited}<{MIN_GROUP},"Suppressed (n<{MIN_GROUP})",{invited}))',
+            f'=IF($A{r}="","",IF({invited}<{MIN_GROUP},"Suppressed (n<{MIN_GROUP})",{completed}))',
+        ])
+
+    # --- THEMES ---------------------------------------------------------------
+    #
+    # The scope asks this sheet for four theme rows. Two are built here — top
+    # stress themes and top burnout/workplace pressure themes. The other two,
+    # suggested intervention themes and suggested next-step packages, are not in
+    # this sheet at all: they need Citta's actual programme names and clinical
+    # review, and inventing them would be the same failure as the chatbot
+    # inventing a helpline number. See the note below the burnout block.
+    #
+    # These were originally generated by Gemini, which grouped the free-text
+    # summary fields into invented labels. That is gone, and the reasoning is
+    # worth keeping because it applies to any future "let the model summarise it"
+    # idea on this tab.
+    #
+    # The chatbot ALREADY classifies stress and burnout at the end of every
+    # conversation, into a closed vocabulary fixed in prompts.py:
+    #
+    #     stress_level : low / moderate / high / unclear
+    #     burnout      : none / mild / moderate / severe / unclear
+    #
+    # So the old code paid Gemini a second time to re-group values Gemini had
+    # already grouped, and stored the result as text that could not update itself.
+    # Counting the columns instead is not a workaround — it is reading the answer
+    # that was already computed. That buys, in one change:
+    #
+    #   * zero API calls per rebuild (was two)
+    #   * live formulas, so the block updates itself like every other figure and
+    #     needs no schedule, no cron, and no "last generated" stamp
+    #   * no generated text anywhere on this tab, so the sheet the EMPLOYER reads
+    #     is now structurally incapable of carrying an employee's words across.
+    #     That is a stronger guarantee than the three prompt rules it replaces.
+    #
+    # What was given up: emergent themes. Gemini could surface "childcare
+    # pressure" if several people raised it; a fixed vocabulary cannot. Columns
+    # F-I (sleep, workplace pressure, manager/team, coping) are still free text
+    # and still available if the client later wants richer themes. Raise it at
+    # sign-off rather than assuming the trade is welcome.
+    #
+    # Suppression still applies: a band below MIN_THEME_PEOPLE shows a dash, never
+    # a number. A band of one is a description of one identifiable person.
+    ROWS += [
+        ["", "", ""],
+        ["THEMES", "", ""],
+        ["Counted from the wellbeing levels recorded at the end of each "
+         "conversation. Within each theme a person is counted once, in their most "
+         f"severe band. A band with fewer than {MIN_THEME_PEOPLE} people shows "
+         "\u2014 rather than a count, so no band can describe one identifiable "
+         "person.", "", ""],
+        ["Top stress themes", "", "Employees"],
+    ]
+    ROWS += [_band_row(lbl, "D", val, [v for _, v in STRESS_BANDS[:i]])
+             for i, (lbl, val) in enumerate(STRESS_BANDS)]
+
+    ROWS += [
+        ["Top burnout / workplace pressure themes", "", "Employees"],
+    ]
+    ROWS += [_band_row(lbl, "E", val, [v for _, v in BURNOUT_BANDS[:i]])
+             for i, (lbl, val) in enumerate(BURNOUT_BANDS)]
+
+    # The five themes added Sep 2026. Same shape as the two above.
+    for _head, _col, _bands in EXTRA_THEMES:
+        ROWS += [[_head, "", "Employees"]]
+        ROWS += [_band_row(lbl, _col, val, [v for _, v in _bands[:i]])
+                 for i, (lbl, val) in enumerate(_bands)]
+
+    # Help-seeking is not a severity scale, so it is not a band() call: column K
+    # already holds a plain Yes/No written at the end of every conversation. Only
+    # the "Yes" line is shown — a "No" count would tell the employer how many of
+    # their staff declined support, which is a step toward reading individuals and
+    # is no part of what this report is for.
+    _HELP = (f'SUMPRODUCT({_mine()}'
+             f'*(COUNTIFS({_r(CS,"A2:A")},{_r(ER,"B2:B")},{_r(CS,"K2:K")},"Yes")>0))')
+    ROWS += [
+        ["Help-seeking interest", "", "Employees"],
+        ["   Asked to speak with someone", "",
+         f'=IF({_HELP}<{MIN_THEME_PEOPLE},"—",{_HELP})'],
+    ]
+
+
+
+
+    ROWS += [
+        ["", "", ""],
+        ["RECOMMENDED INTERVENTIONS", "", ""],
+        ["Suggested from the figures above. Citta reviews and rewrites every line "
+         "before anything reaches an employer — the suggestions are a starting "
+         "point, not a decision. Nothing here names or describes an individual.",
+         "", ""],
+        ["Threshold: theme share", THRESH_SHARE, "A theme above this share of participants counts as high"],
+        ["Threshold: support share", THRESH_SUPPORT, "This share requesting human support triggers the support line"],
+        ["Signal", "Suggested intervention", "Citta's final wording"],
+    ]
+    ROWS += [
+        _rule("High stress or burnout",
+              f'OR({_share("High stress")}>{_bcell("Threshold: theme share")},{_share("Severe burnout")}>{_bcell("Threshold: theme share")})',
+              "Burnout / workload pressure workshop"),
+        _rule("High stress",
+              f'{_share("High stress")}>{_bcell("Threshold: theme share")}',
+              "Stress and emotional regulation webinar"),
+        _rule("Manager or team pressure",
+              f'{_share("Manager unsupportive")}>{_bcell("Threshold: theme share")}',
+              "Manager communication / psychological safety session"),
+        _rule("Sleep and fatigue",
+              f'{_share("Poor sleep")}>{_bcell("Threshold: theme share")}',
+              "Sleep, fatigue and recovery webinar"),
+        _rule("Workplace conflict",
+              f'{_share("Significant conflict")}>{_bcell("Threshold: theme share")}',
+              "Workplace conflict / team dynamics session"),
+        _rule("Requests for human support",
+              f'{_share("Asked to speak with someone")}>{_bcell("Threshold: support share")}',
+              "Help-seeking and confidential support awareness session"),
+        _rule("Voluntary interest in support",
+              f'N({_count_cell("Asked to speak with someone")})>={MIN_THEME_PEOPLE}',
+              "Group support / retreat-style programme for employees who express interest"),
+    ]
+    ROWS += [
+        _rule("Elevated risk present",
+              "OR(" + ",".join(f'N(C{_row_of(lbl) + 1})>0'
+                               for lbl in ("Amber", "Red", "Crisis")) + ")",
+              "Internal Citta review — not for employer-level individual disclosure"),
+    ]
+    ROWS += [
+        ["", "", ""],
+        ["NEXT-STEP RECOMMENDATION", "", ""],
+        ["Suggested next steps from the same figures. As above, Citta finalises "
+         "the wording before anything is sent.", "", ""],
+        ["Signal", "Suggested next step", "Citta's final wording"],
+    ]
+    ROWS += [
+        _rule("Pilot completed",
+              f'{_bcell("Employees who had a conversation")}>0',
+              "Continue Citta Companion access as a retainer"),
+        _rule("Top theme identified",
+              f'{_bcell("Employees who had a conversation")}>={MIN_THEME_PEOPLE}',
+              "Conduct one targeted webinar or workshop on the leading theme"),
+        _rule("Manager or workplace pressure",
+              f'OR({_share("Manager unsupportive")}>{_bcell("Threshold: theme share")},'
+              f'{_share("High pressure")}>{_bcell("Threshold: theme share")})',
+              "Offer a manager support session"),
+        _rule("Enough voluntary interest",
+              f'N({_count_cell("Asked to speak with someone")})>={MIN_THEME_PEOPLE}',
+              "Offer voluntary group support or a retreat-style programme"),
+        _rule("Support opt-ins recorded",
+              f'N({_count_cell("Asked to speak with someone")})>0',
+              "Review support opt-ins internally through Citta intake"),
+        ["Review cadence", "Reassess after 30 / 60 / 90 days", ""],
+    ]
+
+
+def _row_of(label):
+    for i, row in enumerate(ROWS):
+        if row[0] == label:
+            return i
+    raise ValueError(f"row not found: {label}")
+
+
+# Row positions are resolved AFTER the rows are built, not at import time.
+# build_rows() runs once per company, so a ROWS that does not exist yet at
+# import is exactly how the multi-company refactor first broke. Recomputing
+# per build also means a future company-specific row cannot silently shift the
+# formatting onto the wrong lines.
+def _row_positions():
+    banners = [_row_of(t) for t in
+               ("PARTICIPATION", "RISK CATEGORY DISTRIBUTION", "HUMAN SUPPORT",
+                "PARTICIPATION BY SECTOR", "THEMES")]
+    # Theme headings are sub-headings inside THEMES, not banners.
+    theme_heads = [_row_of(t) for t in
+                   ["Top stress themes", "Top burnout / workplace pressure themes"]
+                   + [h for h, _, _ in EXTRA_THEMES]
+                   + ["Help-seeking interest"]]
+    table_heads = [_row_of("Metric"), _row_of("Category"), _row_of("Sector")]
+    return banners, theme_heads, table_heads
 
 ACCENT = {"red": 0.541, "green": 0.392, "blue": 0.125}   # the app's bronze
 SOFT = {"red": 0.961, "green": 0.937, "blue": 0.894}
@@ -547,6 +665,7 @@ def _width(c0, c1, px):
 
 
 def formatting_requests():
+    BANNERS, THEME_HEADS, TABLE_HEADS = _row_positions()
     reqs = [
         # The tab was created as a data grid, so it carries a basic filter over
         # every column. On a report it just paints row 1 blue and hangs dropdown
@@ -673,25 +792,85 @@ def formatting_requests():
     return reqs
 
 
+ALL_TAB = "Executive Report"          # Citta's internal overview
+TAB_PREFIX = "Executive Report - "     # per-company tabs
+
+
+def _companies(svc):
+    """Registered company codes, from the Company Register tab.
+
+    The register is the authority, NOT the Employee ID prefixes found in the
+    registry. A mistyped prefix (ACNE- for ACME-) would otherwise conjure a
+    whole report tab for a company that does not exist, and its employee's
+    data would quietly land there instead of on their employer's report.
+    """
+    try:
+        rows = svc.values().get(
+            spreadsheetId=config.GOOGLE_SHEET_KEY,
+            range=f"'{config.WORKSHEET_COMPANIES}'!A2:A",
+        ).execute().get("values", [])
+    except Exception:
+        print(f"  no '{config.WORKSHEET_COMPANIES}' tab — "
+              f"run tools/build_company_register.py first")
+        return []
+    return [normalise_code(r[0]) for r in rows if r and r[0].strip()]
+
+
+def _tab(svc, title):
+    """Sheet id for ``title``, creating the tab if absent."""
+    meta = svc.get(spreadsheetId=config.GOOGLE_SHEET_KEY).execute()
+    for sh in meta["sheets"]:
+        if sh["properties"]["title"] == title:
+            return sh["properties"]["sheetId"]
+    reply = svc.batchUpdate(
+        spreadsheetId=config.GOOGLE_SHEET_KEY,
+        body={"requests": [{"addSheet": {"properties": {
+            "title": title,
+            "gridProperties": {"rowCount": 200, "columnCount": 26},
+        }}}]}).execute()
+    return reply["replies"][0]["addSheet"]["properties"]["sheetId"]
+
+
+def _write(svc, title, company):
+    """Build and write one report tab."""
+    global COMPANY, SHEET_ID
+    COMPANY = company
+    SHEET_ID = _tab(svc, title)
+    build_rows()
+
+    svc.values().clear(spreadsheetId=config.GOOGLE_SHEET_KEY,
+                       range=f"'{title}'!A1:Z200", body={}).execute()
+    svc.values().update(
+        spreadsheetId=config.GOOGLE_SHEET_KEY,
+        range=f"'{title}'!A1",
+        valueInputOption="USER_ENTERED",
+        body={"values": ROWS}).execute()
+    svc.batchUpdate(spreadsheetId=config.GOOGLE_SHEET_KEY,
+                    body={"requests": formatting_requests()}).execute()
+    return len(ROWS)
+
+
 def main():
     creds = Credentials.from_service_account_file(
         config.GOOGLE_CREDENTIALS_FILE,
         scopes=["https://www.googleapis.com/auth/spreadsheets"])
     svc = build("sheets", "v4", credentials=creds).spreadsheets()
 
+    # Citta's internal overview: every company at once. Deliberately kept, at
+    # the client's request, and deliberately NOT shareable with an employer —
+    # it shows every employer's figures side by side.
+    rows = _write(svc, ALL_TAB, None)
+    print(f"{ALL_TAB}: {rows} rows (all companies — INTERNAL ONLY)")
 
-    svc.values().clear(spreadsheetId=config.GOOGLE_SHEET_KEY,
-                       range="'Executive Report'!A1:Z200", body={}).execute()
-    svc.values().update(
-        spreadsheetId=config.GOOGLE_SHEET_KEY,
-        range="'Executive Report'!A1",
-        valueInputOption="USER_ENTERED",
-        body={"values": ROWS}).execute()
-    svc.batchUpdate(spreadsheetId=config.GOOGLE_SHEET_KEY,
-                    body={"requests": formatting_requests()}).execute()
+    for code in _companies(svc):
+        title = f"{TAB_PREFIX}{code}"
+        rows = _write(svc, title, code)
+        print(f"{title}: {rows} rows")
 
-    print(f"Executive Report rebuilt: {len(ROWS)} rows, "
-          f"sector block at row {SECTOR_START}, suppression n<{MIN_GROUP}")
+    print(f"\nSector suppression n<{MIN_GROUP}, "
+          f"theme suppression n<{MIN_THEME_PEOPLE}")
+    print("Share ONLY the per-company tabs with an employer, never "
+          f"'{ALL_TAB}'.")
 
 
 if __name__ == "__main__":

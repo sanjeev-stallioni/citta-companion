@@ -114,6 +114,44 @@ def _count_formula(row: int) -> str:
     return f'=IF($A{row}="","",COUNTIF({reg},$A{row}&"-*"))'
 
 
+def _backfill_counts(svc):
+    """Restore the count formula on rows that have a code but no formula.
+
+    A company is normally added here BEFORE anyone registers for it -- that is
+    the correct order, and the reason the register exists. Such a row is typed
+    in by hand, so it carries no count formula, and ``discovered`` never sees
+    it either (it is not in the registry yet, having no employees). Without
+    this, the row's count stays blank forever: it would not start counting on
+    the day its first employee registered, and nothing would report an error.
+
+    Returns the codes repaired.
+    """
+    grid = svc.values().get(
+        spreadsheetId=config.GOOGLE_SHEET_KEY,
+        range=f"'{config.WORKSHEET_COMPANIES}'!A2:E",
+        valueRenderOption="FORMULA",
+    ).execute().get("values", [])
+
+    repaired, updates = [], []
+    for i, row in enumerate(grid):
+        code = row[0].strip() if row and row[0] else ""
+        if not code:
+            continue
+        current = row[4] if len(row) > 4 else ""
+        if str(current).startswith("="):
+            continue
+        rownum = i + 2
+        repaired.append(code)
+        updates.append({"range": f"'{config.WORKSHEET_COMPANIES}'!E{rownum}",
+                        "values": [[_count_formula(rownum)]]})
+
+    if updates:
+        svc.values().batchUpdate(
+            spreadsheetId=config.GOOGLE_SHEET_KEY,
+            body={"valueInputOption": "USER_ENTERED", "data": updates}).execute()
+    return repaired
+
+
 def main():
     svc = _service()
     sheet_id, created = _sheet_id(svc, config.WORKSHEET_COMPANIES)
@@ -142,6 +180,7 @@ def main():
 
     total = len(existing) + len(discovered)
     _format(svc, sheet_id, max(total, 1))
+    repaired = _backfill_counts(svc)
 
     print(f"{config.WORKSHEET_COMPANIES}: "
           f"{'created' if created else 'updated'}, "
@@ -149,6 +188,8 @@ def main():
           + (f" (added {', '.join(discovered)})" if discovered else ""))
     if discovered:
         print("  Fill in Company Name for each, and set Payment/Pilot status.")
+    if repaired:
+        print(f"  Restored the count formula for: {', '.join(repaired)}")
 
 
 def _format(svc, sheet_id, rows):

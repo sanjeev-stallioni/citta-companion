@@ -737,8 +737,20 @@ def formatting_requests():
         _fmt(1, 3, {"userEnteredFormat": {"textFormat": {
             "italic": True, "fontSize": 9, "foregroundColor": MUTED}}},
             "userEnteredFormat.textFormat"),
-        _width(0, 1, 330),
-        _width(1, 3, 170),
+        _width(0, 1, 300),
+        _width(1, 2, 210),   # B holds recommendation text up to ~75 chars
+        _width(2, 3, 190),
+        # WRAP, not the default overflow.
+        #
+        # With no wrap strategy a cell OVERFLOWS into the next column when that
+        # column is empty and CLIPS when it is not. On screen that is tolerable
+        # because the columns are wide and the window is wider. In an exported
+        # PDF it produced two visible faults: "Continue Citta Companion access
+        # as a retainer" printed as "...panion access as a retainer", and the
+        # notes in column C ran off the page edge. Wrapping makes the row grow
+        # instead of the text disappearing.
+        _fmt(0, 200, {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
+             "userEnteredFormat.wrapStrategy", 0, 3),
         {"updateSheetProperties": {
             "properties": {"sheetId": SHEET_ID,
                            "gridProperties": {"frozenRowCount": 3}},

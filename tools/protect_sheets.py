@@ -83,11 +83,18 @@ def _targets(by_title):
     """Ranges to protect, as (title, description, range-dict)."""
     out = []
 
-    # --- Executive Report: everything. ------------------------------------
-    if "Executive Report" in by_title:
-        sid = by_title["Executive Report"]["properties"]["sheetId"]
-        out.append(("Executive Report",
-                    f"{TAG} Executive Report is generated — rebuild it with "
+    # --- Executive Report, and every per-company tab: everything. ----------
+    #
+    # The per-company tabs matter MORE than the all-company one, not less:
+    # they are the tabs an employer is actually sent, so they are the ones a
+    # stray edit reaches. Matching only the exact title left CITTA, STL, PR
+    # and GOOGLE completely unprotected.
+    for title in sorted(by_title):
+        if title != "Executive Report" and not title.startswith("Executive Report - "):
+            continue
+        sid = by_title[title]["properties"]["sheetId"]
+        out.append((title,
+                    f"{TAG} {title} is generated — rebuild it with "
                     f"tools/build_exec_report.py instead of editing cells",
                     {"sheetId": sid}))
 

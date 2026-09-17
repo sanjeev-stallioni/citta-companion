@@ -22,7 +22,7 @@ Design notes:
   half the queue; this is the same mistake the Executive Report's sector block
   made until it was fixed on 24 Aug.
 
-* **The reviewer's own columns (G-J) are typed in and never overwritten.**
+* **The reviewer's own columns (H-K) are typed in and never overwritten.**
   They sit to the right of the formula block so a rebuild cannot touch them —
   but note a rebuild does NOT preserve the row-to-person alignment if the
   underlying data changed, so review notes belong in `Risk Flags` H-J for
@@ -69,16 +69,31 @@ FOLLOW_UP_BANDS = '{"Amber";"Red";"Crisis"}'
 
 HEADERS = [
     "Employee ID",          # A - formula
-    "Source",               # B - formula
-    "Date",                 # C - formula
-    "Risk Category",        # D - formula
-    "Human Support",        # E - formula
-    "Transcript",           # F - formula
-    "Assigned To",          # G - typed by Citta
-    "Contacted On",         # H - typed by Citta
-    "Outcome",              # I - typed by Citta
-    "Internal Notes",       # J - typed by Citta
+    "Company",              # B - formula, derived from the ID prefix
+    "Source",               # C - formula
+    "Date",                 # D - formula
+    "Risk Category",        # E - formula
+    "Human Support",        # F - formula
+    "Transcript",           # G - formula
+    "Assigned To",          # H - typed by Citta
+    "Contacted On",         # I - typed by Citta
+    "Outcome",              # J - typed by Citta
+    "Internal Notes",       # K - typed by Citta
 ]
+
+# Company is DERIVED, never stored. The Employee ID already carries it
+# (ACME-EMP001), so a separate stored value would be a second thing to keep in
+# step with the prefix, and the moment they disagreed there would be no way to
+# tell which was right. See company.py.
+#
+# LEFT(id, FIND("-", id) - 1) rather than a lookup: the queue is one array
+# formula over two source tabs, so anything per-row has to be expressible
+# inline. IFERROR covers an ID with no hyphen at all, which is a data error
+# worth seeing rather than hiding.
+def _company_col(id_range: str) -> str:
+    """Per-row company code taken from the Employee ID prefix."""
+    return (f'IF({id_range}="","",'
+            f'IFERROR(UPPER(LEFT({id_range},FIND("-",{id_range})-1)),"UNKNOWN"))')
 
 TITLE = [
     ["Citta Companion — Admin Review"],
@@ -128,6 +143,7 @@ def queue_formula() -> str:
     flags = (
         f'IFERROR(FILTER('
         f'{{{_r(RF,"A2:A")},'
+        f'{_company_col(_r(RF,"A2:A"))},'
         f'IF({_r(RF,"A2:A")}<>"","Crisis flag",""),'
         f'IF({_r(RF,"A2:A")}<>"",LEFT({_r(RF,"B2:B")},10),""),'
         f'{_r(RF,"C2:C")},{_r(RF,"F2:F")},{_r(RF,"K2:K")}}},'
@@ -136,6 +152,7 @@ def queue_formula() -> str:
     summaries = (
         f'IFERROR(FILTER('
         f'{{{_r(CS,"A2:A")},'
+        f'{_company_col(_r(CS,"A2:A"))},'
         f'IF({_r(CS,"A2:A")}<>"","Conversation",""),'
         f'IF({_r(CS,"A2:A")}<>"",LEFT({_r(CS,"B2:B")},10),""),'
         f'{_r(CS,"M2:M")},{_r(CS,"K2:K")},{_r(CS,"N2:N")}}},'
@@ -195,7 +212,7 @@ MUTED = {"red": 0.55, "green": 0.52, "blue": 0.48}
 INPUT_TINT = {"red": 0.988, "green": 0.984, "blue": 0.973}
 
 
-def _fmt(r0, r1, cell, fields, c0=0, c1=10):
+def _fmt(r0, r1, cell, fields, c0=0, c1=11):
     return {"repeatCell": {
         "range": {"sheetId": SHEET_ID, "startRowIndex": r0, "endRowIndex": r1,
                   "startColumnIndex": c0, "endColumnIndex": c1},
@@ -247,18 +264,19 @@ def formatting_requests():
         # which half of the sheet is safe to type in.
         _fmt(HEADER_ROW, last, {"userEnteredFormat": {
             "backgroundColor": INPUT_TINT}},
-            "userEnteredFormat.backgroundColor", 6, 10),
+            "userEnteredFormat.backgroundColor", 7, 11),
         _fmt(0, last, {"userEnteredFormat": {
             "verticalAlignment": "MIDDLE",
             "padding": {"top": 3, "bottom": 3, "left": 10, "right": 10}}},
             "userEnteredFormat(verticalAlignment,padding)"),
         _width(0, 1, 130),   # Employee ID
-        _width(1, 2, 105),   # Source
-        _width(2, 3, 95),    # Date
-        _width(3, 4, 105),   # Risk Category
-        _width(4, 5, 115),   # Human Support
-        _width(5, 6, 190),   # Transcript
-        _width(6, 10, 150),  # reviewer columns
+        _width(1, 2, 105),   # Company
+        _width(2, 3, 105),   # Source
+        _width(3, 4, 95),    # Date
+        _width(4, 5, 105),   # Risk Category
+        _width(5, 6, 115),   # Human Support
+        _width(6, 7, 190),   # Transcript
+        _width(7, 11, 150),  # reviewer columns
     ]
 
     # Risk bands carry meaning — colour column D like the Executive Report.
@@ -269,7 +287,7 @@ def formatting_requests():
         reqs.append({"addConditionalFormatRule": {"rule": {
             "ranges": [{"sheetId": SHEET_ID,
                         "startRowIndex": HEADER_ROW, "endRowIndex": last,
-                        "startColumnIndex": 3, "endColumnIndex": 4}],
+                        "startColumnIndex": 4, "endColumnIndex": 5}],
             "booleanRule": {
                 "condition": {"type": "TEXT_EQ",
                               "values": [{"userEnteredValue": band}]},
@@ -282,10 +300,10 @@ def formatting_requests():
     reqs.append({"addConditionalFormatRule": {"rule": {
         "ranges": [{"sheetId": SHEET_ID,
                     "startRowIndex": HEADER_ROW, "endRowIndex": last,
-                    "startColumnIndex": 0, "endColumnIndex": 10}],
+                    "startColumnIndex": 0, "endColumnIndex": 11}],
         "booleanRule": {
             "condition": {"type": "CUSTOM_FORMULA", "values": [
-                {"userEnteredValue": f'=$D{FIRST_QUEUE_ROW}="Crisis"'}]},
+                {"userEnteredValue": f'=$E{FIRST_QUEUE_ROW}="Crisis"'}]},
             "format": {"backgroundColor": {
                 "red": 0.996, "green": 0.949, "blue": 0.941}}}},
         "index": 0}})
@@ -294,7 +312,7 @@ def formatting_requests():
     reqs.append({"setDataValidation": {
         "range": {"sheetId": SHEET_ID,
                   "startRowIndex": HEADER_ROW, "endRowIndex": last,
-                  "startColumnIndex": 8, "endColumnIndex": 9},
+                  "startColumnIndex": 9, "endColumnIndex": 10},
         "rule": {"condition": {"type": "ONE_OF_LIST", "values": [
             {"userEnteredValue": v} for v in
             ["Not started", "Attempted contact", "Contacted",
@@ -328,7 +346,7 @@ def main() -> None:
 
     print(f"Admin Review rebuilt: queue starts at row {FIRST_QUEUE_ROW}, "
           f"room for {QUEUE_ROWS} lines")
-    print("NOTE: columns G-J are typed in by hand and are NOT preserved by a "
+    print("NOTE: columns H-K are typed in by hand and are NOT preserved by a "
           "rebuild — anything that must survive belongs in Risk Flags H-J.")
 
 

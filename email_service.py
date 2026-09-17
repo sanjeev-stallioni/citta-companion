@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 
 import config
+from company import company_of
 
 logger = logging.getLogger(__name__)
 
@@ -117,9 +118,19 @@ def _footer(employee_id: str, risk_category: str, support_requested: bool | None
     Scope: alerts must carry Employee ID, risk category, whether human support
     was requested, whether the person opted in for further support, a
     timestamp, and a link to the admin review sheet.
+
+    Company is added here rather than passed in by each caller, for two
+    reasons. It appears on every alert type at once, and it is DERIVED from
+    the Employee ID prefix -- so it cannot disagree with the ID it sits beside,
+    which a separately-passed argument eventually would.
+
+    It matters once Citta runs more than one employer: an intake worker
+    reading a crisis alert at 2am needs to know whose duty-of-care process
+    applies before they can act on it.
     """
     return (
         f"Employee ID       : {employee_id}\n"
+        f"Company           : {company_of(employee_id)}\n"
         f"Risk category     : {risk_category or 'n/a'}\n"
         f"Support requested : {_tri(support_requested)}\n"
         f"Opted in          : {_tri(opted_in)}\n"

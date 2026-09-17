@@ -428,10 +428,20 @@ def build_rows():
         # date matters for the same reason: a PDF is a snapshot of a live
         # report, and an undated one gives no clue how stale it is.
         [f"Citta Companion — Executive Report — {COMPANY}" if COMPANY
-         else "Citta Companion — Executive Report (ALL COMPANIES — INTERNAL)",
+         # Kept SHORT. The long form, "... (ALL COMPANIES — INTERNAL)", needed
+         # three wrapped lines at 15pt in a 300px column; row 1's height does
+         # not grow to match, so the title printed ON TOP of the disclaimer
+         # beneath it -- "De-identified.(ALL ContainsCOMPANIES". The warning
+         # still has to be unmissable, so it moves to the line below instead
+         # of being dropped.
+         else "Citta Companion — INTERNAL (all companies)",
          "", ""],
-        ["De-identified. Contains no names, emails, phone numbers, individual "
-         "answers, transcripts, or identifiable risk data.", "", ""],
+        [("De-identified. Contains no names, emails, phone numbers, individual "
+          "answers, transcripts, or identifiable risk data.") if COMPANY
+         else ("NOT FOR ANY EMPLOYER — this tab shows every company side by "
+               "side. Send an employer their own tab only. De-identified: no "
+               "names, emails, phone numbers, answers or transcripts."),
+         "", ""],
         ['=CONCATENATE("Figures as at ",TEXT(NOW(),"d mmmm yyyy, HH:mm"),'
          '" — this sheet updates live; a printed or exported copy does not.")',
          "", ""],
@@ -843,6 +853,20 @@ def formatting_requests():
     r = _row_of("Employees who had a conversation")
     reqs.append(_fmt(r, r + 1, {"userEnteredFormat": {
         "textFormat": {"bold": True}}}, "userEnteredFormat.textFormat", 0, 2))
+
+    # Let every row size itself to its own content, BEFORE the spacer heights
+    # below are applied.
+    #
+    # A row with a fixed height does not grow when its text wraps, and the
+    # overflow is simply not drawn. The internal tab had rows left at 35px by
+    # an earlier layout: "Threshold: theme share" wrapped to two lines, only
+    # the first fitted, and the word "theme" was missing from the exported PDF
+    # entirely. The per-company tabs happened to be at 20px, which Sheets
+    # treats as auto, so they rendered correctly -- which is why this showed up
+    # on one tab and not the others despite identical content and formatting.
+    reqs.append({"autoResizeDimensions": {"dimensions": {
+        "sheetId": SHEET_ID, "dimension": "ROWS",
+        "startIndex": 0, "endIndex": 200}}})
 
     # Breathing room above each section banner.
     for r in BANNERS[1:]:

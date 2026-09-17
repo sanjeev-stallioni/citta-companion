@@ -98,8 +98,15 @@ def _codes_in_registry(svc):
     return ordered
 
 
-def _count_formula(row: int) -> str:
-    """Live count of registry rows whose Employee ID carries this prefix.
+def _count_formula() -> str:
+    """ONE formula in E2 that counts every row, present and future.
+
+    ARRAYFORMULA over the whole column, not a formula per row, so a company
+    typed in by hand starts counting the moment its code is entered -- with no
+    script run. The per-row version meant adding a company and running this
+    tool were two separate steps, and forgetting the second left that company's
+    count blank forever without any error. Nobody should have to remember a
+    command to make a count work.
 
     INDIRECT for the same reason every formula on the Executive Report uses it:
     Make inserts registrations as ROW INSERTS at the top, and Sheets rewrites
@@ -111,45 +118,39 @@ def _count_formula(row: int) -> str:
     prefix followed by anything, which is exactly the rule company_of applies.
     """
     reg = f'INDIRECT("\'{config.WORKSHEET_REGISTRY}\'!B2:B")'
-    return f'=IF($A{row}="","",COUNTIF({reg},$A{row}&"-*"))'
+    codes = f'INDIRECT("\'{config.WORKSHEET_COMPANIES}\'!A2:A")'
+    return (f'=ARRAYFORMULA(IF({codes}="","",'
+            f'COUNTIF({reg},{codes}&"-*")))')
 
 
-def _backfill_counts(svc):
-    """Restore the count formula on rows that have a code but no formula.
+def _install_count_formula(svc):
+    """Put the single ARRAYFORMULA in E2, clearing any per-row leftovers.
 
-    A company is normally added here BEFORE anyone registers for it -- that is
-    the correct order, and the reason the register exists. Such a row is typed
-    in by hand, so it carries no count formula, and ``discovered`` never sees
-    it either (it is not in the registry yet, having no employees). Without
-    this, the row's count stays blank forever: it would not start counting on
-    the day its first employee registered, and nothing would report an error.
-
-    Returns the codes repaired.
+    Idempotent: returns False when E2 already holds it, so re-running this
+    tool does not churn the sheet. The clear matters because earlier versions
+    wrote one formula per row -- leaving those in place would make every row
+    below E2 a #REF! against the array's output.
     """
-    grid = svc.values().get(
+    want = _count_formula()
+    col = svc.values().get(
         spreadsheetId=config.GOOGLE_SHEET_KEY,
-        range=f"'{config.WORKSHEET_COMPANIES}'!A2:E",
+        range=f"'{config.WORKSHEET_COMPANIES}'!E2:E",
         valueRenderOption="FORMULA",
     ).execute().get("values", [])
 
-    repaired, updates = [], []
-    for i, row in enumerate(grid):
-        code = row[0].strip() if row and row[0] else ""
-        if not code:
-            continue
-        current = row[4] if len(row) > 4 else ""
-        if str(current).startswith("="):
-            continue
-        rownum = i + 2
-        repaired.append(code)
-        updates.append({"range": f"'{config.WORKSHEET_COMPANIES}'!E{rownum}",
-                        "values": [[_count_formula(rownum)]]})
+    current = col[0][0] if col and col[0] else ""
+    stale_below = any(r and str(r[0]).strip() for r in col[1:])
+    if str(current).replace(" ", "") == want.replace(" ", "") and not stale_below:
+        return False
 
-    if updates:
-        svc.values().batchUpdate(
-            spreadsheetId=config.GOOGLE_SHEET_KEY,
-            body={"valueInputOption": "USER_ENTERED", "data": updates}).execute()
-    return repaired
+    svc.values().clear(
+        spreadsheetId=config.GOOGLE_SHEET_KEY,
+        range=f"'{config.WORKSHEET_COMPANIES}'!E2:E", body={}).execute()
+    svc.values().update(
+        spreadsheetId=config.GOOGLE_SHEET_KEY,
+        range=f"'{config.WORKSHEET_COMPANIES}'!E2",
+        valueInputOption="USER_ENTERED", body={"values": [[want]]}).execute()
+    return True
 
 
 def main():
@@ -167,11 +168,9 @@ def main():
         valueInputOption="RAW", body={"values": [HEADERS]}).execute()
 
     if discovered:
-        start = len(existing) + 2
-        rows = []
-        for i, code in enumerate(discovered):
-            rows.append([code, "", "Not Paid", "Setup",
-                         _count_formula(start + i), ""])
+        # Columns A-D only. Column E belongs to the ARRAYFORMULA in E2 and
+        # writing a value into it would break the array for every row below.
+        rows = [[code, "", "Not Paid", "Setup"] for code in discovered]
         svc.values().append(
             spreadsheetId=config.GOOGLE_SHEET_KEY,
             range=f"'{config.WORKSHEET_COMPANIES}'!A1",
@@ -180,7 +179,7 @@ def main():
 
     total = len(existing) + len(discovered)
     _format(svc, sheet_id, max(total, 1))
-    repaired = _backfill_counts(svc)
+    installed = _install_count_formula(svc)
 
     print(f"{config.WORKSHEET_COMPANIES}: "
           f"{'created' if created else 'updated'}, "
@@ -188,12 +187,18 @@ def main():
           + (f" (added {', '.join(discovered)})" if discovered else ""))
     if discovered:
         print("  Fill in Company Name for each, and set Payment/Pilot status.")
-    if repaired:
-        print(f"  Restored the count formula for: {', '.join(repaired)}")
+    if installed:
+        print("  Installed the column-wide count formula in E2.")
+    print("  Counts are self-maintaining: a company typed into column A is "
+          "counted at once, with no need to re-run this tool.")
 
 
 def _format(svc, sheet_id, rows):
-    last = rows + 1
+    # Reach well past the last company so the NEXT one added by hand lands on
+    # a row that already has its dropdowns and tint. Sizing this to the current
+    # count meant every new company arrived on an unformatted row -- the same
+    # trap the count formula used to set, and just as quiet.
+    last = max(rows + 1, 200)
     reqs = [
         {"repeatCell": {
             "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},

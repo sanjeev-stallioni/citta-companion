@@ -153,6 +153,38 @@ def _install_count_formula(svc):
     return True
 
 
+def _report_orphans(svc):
+    """Warn about registry prefixes that no registered company claims.
+
+    These employees are INVISIBLE: no company tab counts them, because every
+    report tab is built from the Company Register, and they do not fall into
+    another company's figures either. They can still register, still chat,
+    still reach crisis -- their conversations simply reach no employer report.
+
+    Nothing here deletes or rewrites anything; the codes may be legitimate
+    companies somebody forgot to register. It prints, and the operator decides.
+    """
+    reg = svc.values().get(
+        spreadsheetId=config.GOOGLE_SHEET_KEY,
+        range=f"'{config.WORKSHEET_REGISTRY}'!B2:B",
+    ).execute().get("values", [])
+    listed = _existing_codes(svc)
+
+    orphans = {}
+    for row in reg:
+        if not row or not row[0].strip():
+            continue
+        code = company_of(row[0])
+        if code == UNKNOWN or code in listed:
+            continue
+        orphans.setdefault(code, []).append(row[0].strip())
+
+    for code, ids in sorted(orphans.items()):
+        print(f"  WARNING: '{code}' has {len(ids)} employee(s) but is not on "
+              f"the register — they appear on NO report. e.g. {ids[0]}")
+    return orphans
+
+
 def main():
     svc = _service()
     sheet_id, created = _sheet_id(svc, config.WORKSHEET_COMPANIES)
@@ -191,6 +223,7 @@ def main():
         print("  Installed the column-wide count formula in E2.")
     print("  Counts are self-maintaining: a company typed into column A is "
           "counted at once, with no need to re-run this tool.")
+    _report_orphans(svc)
 
 
 def _format(svc, sheet_id, rows):

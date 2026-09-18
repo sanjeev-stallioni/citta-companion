@@ -56,9 +56,12 @@ def company_of(employee_id: str) -> str:
     test rows have all disagreed on case before now, and a company that splits
     into "ACME" and "Acme" would split its report in half without erroring.
 
-    This does NOT check the company is registered -- see :func:`is_registered`.
-    Parsing and validating are separate so a caller can tell an unparseable ID
-    from a well-formed one naming a company nobody has set up.
+    This does NOT check the company is registered. Whether a prefix appears on
+    the Company Register is a question about the SHEET, not about the ID, so it
+    is answered where the sheet is read: tools/build_company_register.py warns
+    about registry prefixes no registered company claims. Parsing and
+    validating stay separate so a caller can tell an unparseable ID from a
+    well-formed one naming a company nobody has set up.
     """
     match = _ID_PATTERN.match(str(employee_id or "").strip())
     if not match:

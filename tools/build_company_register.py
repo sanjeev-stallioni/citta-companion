@@ -175,13 +175,23 @@ def _report_orphans(svc):
         if not row or not row[0].strip():
             continue
         code = company_of(row[0])
-        if code == UNKNOWN or code in listed:
+        if code in listed:
             continue
+        # UNKNOWN is reported, NOT skipped. It was skipped at first, on the
+        # reasoning that an unparseable ID is a data error rather than a
+        # company. But "-EMP009" -- a real row, produced when the company field
+        # arrived empty -- parses as UNKNOWN, and those employees are exactly
+        # the invisible ones this check exists to surface. Skipping them meant
+        # the check stayed silent about the only cases it had ever seen.
         orphans.setdefault(code, []).append(row[0].strip())
 
     for code, ids in sorted(orphans.items()):
-        print(f"  WARNING: '{code}' has {len(ids)} employee(s) but is not on "
-              f"the register — they appear on NO report. e.g. {ids[0]}")
+        if code == UNKNOWN:
+            print(f"  WARNING: {len(ids)} employee ID(s) carry NO company "
+                  f"prefix — they appear on NO report: {', '.join(ids[:5])}")
+        else:
+            print(f"  WARNING: '{code}' has {len(ids)} employee(s) but is not "
+                  f"on the register — they appear on NO report. e.g. {ids[0]}")
     return orphans
 
 

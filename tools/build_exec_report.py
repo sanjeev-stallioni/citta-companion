@@ -620,27 +620,33 @@ def build_rows():
         ["Signal", "Suggested intervention", "Citta's final wording"],
     ]
     ROWS += [
+        # Citta's own programme names, supplied 18 Sep 2026. Used VERBATIM --
+        # these are their products, and paraphrasing one would put a programme
+        # in front of an employer under a name Citta does not use.
         _rule("High stress or burnout",
               f'OR({_share("High stress")}>{_bcell("Threshold: theme share")},{_share("Severe burnout")}>{_bcell("Threshold: theme share")})',
-              "Burnout / workload pressure workshop"),
+              "Citta Burnout Reset Workshop"),
         _rule("High stress",
               f'{_share("High stress")}>{_bcell("Threshold: theme share")}',
-              "Stress and emotional regulation webinar"),
+              "Citta Stress Regulation Webinar"),
         _rule("Manager or team pressure",
               f'{_share("Manager unsupportive")}>{_bcell("Threshold: theme share")}',
-              "Manager communication / psychological safety session"),
+              "Citta Manager Support Lab / Citta Psychological Safety Session"),
         _rule("Sleep and fatigue",
               f'{_share("Poor sleep")}>{_bcell("Threshold: theme share")}',
-              "Sleep, fatigue and recovery webinar"),
+              "Citta Sleep, Fatigue and Recovery Webinar"),
         _rule("Workplace conflict",
               f'{_share("Significant conflict")}>{_bcell("Threshold: theme share")}',
-              "Workplace conflict / team dynamics session"),
+              "Citta Workplace Conflict and Communication Session"),
+        _rule("Difficulty coping",
+              f'{_share("No coping strategies")}>{_bcell("Threshold: theme share")}',
+              "Citta Emotional Regulation Workshop"),
         _rule("Requests for human support",
               f'{_share("Asked to speak with someone")}>{_bcell("Threshold: support share")}',
-              "Help-seeking and confidential support awareness session"),
+              "Citta Help-Seeking and Confidential Support Orientation"),
         _rule("Voluntary interest in support",
               f'N({_count_cell("Asked to speak with someone")})>={MIN_THEME_PEOPLE}',
-              "Group support / retreat-style programme for employees who express interest"),
+              "Citta Group Reset Circle"),
     ]
     ROWS += [
         _rule("Elevated risk present",
@@ -656,23 +662,35 @@ def build_rows():
         ["Signal", "Suggested next step", "Citta's final wording"],
     ]
     ROWS += [
+        # Citta's wording, 18 Sep 2026, verbatim.
         _rule("Pilot completed",
               f'{_bcell("Employees who had a conversation")}>0',
-              "Continue Citta Companion access as a retainer"),
+              "Continue Citta Companion access as an employer retainer."),
         _rule("Top theme identified",
               f'{_bcell("Employees who had a conversation")}>={MIN_THEME_PEOPLE}',
-              "Conduct one targeted webinar or workshop on the leading theme"),
+              "Run one targeted webinar based on the highest wellbeing theme."),
         _rule("Manager or workplace pressure",
               f'OR({_share("Manager unsupportive")}>{_bcell("Threshold: theme share")},'
               f'{_share("High pressure")}>{_bcell("Threshold: theme share")})',
-              "Offer a manager support session"),
+              "Offer a manager support session where team pressure or "
+              "communication stress is elevated."),
         _rule("Enough voluntary interest",
               f'N({_count_cell("Asked to speak with someone")})>={MIN_THEME_PEOPLE}',
-              "Offer voluntary group support or a retreat-style programme"),
+              "Offer voluntary group support where employees have opted in for "
+              "further contact."),
         _rule("Support opt-ins recorded",
               f'N({_count_cell("Asked to speak with someone")})>0',
-              "Review support opt-ins internally through Citta intake"),
-        ["Review cadence", "Reassess after 30 / 60 / 90 days", ""],
+              "Review support opt-ins through the Citta intake process."),
+        ["Review cadence",
+         "Reassess organisational wellbeing themes after 30, 60 or 90 days.",
+         ""],
+        # Fires on the same condition as the retainer line: this is the renewal
+        # conversation, so it belongs with sustained participation and demand.
+        _rule("Participation and support demand active",
+              f'AND({_bcell("Employees who had a conversation")}>={MIN_THEME_PEOPLE},'
+              f'N({_count_cell("Asked to speak with someone")})>0)',
+              "Consider a Citta Companion renewal if participation and support "
+              "demand remain active."),
     ]
 
 
